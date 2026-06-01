@@ -11,6 +11,13 @@ from datetime import datetime
 def get_stock_data(ticker: str) -> dict:
     """Собирает все нужные данные по тикеру для ИИ-анализа."""
 
+    # Российские тикеры — добавляем суффикс .ME для MOEX
+    ru_tickers = ["SBER", "GAZP", "LKOH", "YNDX", "ROSN", 
+                   "NVTK", "GMKN", "MGNT", "MTSS", "ALRS",
+                   "TATN", "SNGS", "POLY", "PLZL", "CHMF"]
+    if ticker.upper() in ru_tickers and "." not in ticker:
+        ticker = ticker.upper() + ".ME"
+    
     stock = yf.Ticker(ticker)
     info = stock.info
 
