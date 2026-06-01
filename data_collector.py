@@ -11,12 +11,18 @@ from datetime import datetime
 def get_stock_data(ticker: str) -> dict:
     """Собирает все нужные данные по тикеру для ИИ-анализа."""
 
-    # Российские тикеры — добавляем суффикс .ME для MOEX
-    ru_tickers = ["SBER", "GAZP", "LKOH", "YNDX", "ROSN", 
-                   "NVTK", "GMKN", "MGNT", "MTSS", "ALRS",
-                   "TATN", "SNGS", "POLY", "PLZL", "CHMF"]
-    if ticker.upper() in ru_tickers and "." not in ticker:
-        ticker = ticker.upper() + ".ME"
+    # Если тикер без точки и состоит только из кириллицы или 
+    # это известный паттерн MOEX — добавляем .ME
+    # Пользователь может ввести SBER, GAZP, LKOH и любой другой
+    if "." not in ticker:
+        # Пробуем сначала как есть (американский)
+        test = yf.Ticker(ticker)
+        test_info = test.info
+        if not test_info.get("regularMarketPrice") and not test_info.get("currentPrice"):
+            # Данных нет — пробуем как российский
+            ticker = ticker.upper() + ".ME"
+    
+    currency_symbol = "₽" if ".ME" in ticker else "$"
     
     stock = yf.Ticker(ticker)
     info = stock.info
