@@ -34,6 +34,7 @@ def get_stock_data(ticker: str) -> dict:
         "date": datetime.today().strftime("%Y-%m-%d"),
         "price": info.get("currentPrice") or info.get("regularMarketPrice"),
         "currency": info.get("currency", "USD"),
+        "currency_symbol": currency_symbol,
         "week_52_high": info.get("fiftyTwoWeekHigh"),
         "week_52_low": info.get("fiftyTwoWeekLow"),
         "market_cap": info.get("marketCap"),
