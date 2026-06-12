@@ -129,7 +129,17 @@ def get_stock_data(ticker: str) -> dict:
         print(f"GuruFocus parsed guru_data: {guru_data}")
     except Exception as e:
         print(f"GuruFocus error: {e}")
-        $ grep -n "return {" data_collector.py
+        guru_data = {}
+
+    return {
+        "key_indicators": key_indicators,
+        "business": business,
+        "financial_health": financial_health,
+        "growth": growth,
+        "analyst": analyst,
+        "news": news,
+        "guru_data": guru_data,
+    }
 
 
 def format_for_display(data: dict) -> str:
