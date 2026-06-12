@@ -64,10 +64,12 @@ Free Cash Flow: {fh['free_cashflow']}
 {news_text}
 
 Данные GuruFocus:
-DCF Fair Value: {guru_data.get('dcf_fair_value')}
-GF Value: {guru_data.get('gf_value')}
-Рейтинг прибыльности: {guru_data.get('profitability_rank')}
-Финансовая устойчивость: {guru_data.get('financial_strength')}
+GF Score: {guru_data.get('gf_score', 'Н/Д')}
+DCF Fair Value: {guru_data.get('dcf_fair_value', 'Н/Д')}
+GF Value: {guru_data.get('gf_value', 'Н/Д')}
+Рейтинг прибыльности: {guru_data.get('profitability_rank', 'Н/Д')}
+Финансовая устойчивость: {guru_data.get('financial_strength', 'Н/Д')}
+Рейтинг роста: {guru_data.get('growth_rank', 'Н/Д')}
 Предупреждения: {guru_data.get('warning_signs', [])}
 Позитивные сигналы: {guru_data.get('positive_signs', [])}
 
@@ -117,12 +119,18 @@ GF Value: {guru_data.get('gf_value')}
   "analyst_consensus": "Buy / Hold / Sell"
 }}"""
 
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.3,
-        max_tokens=2000,
-    )
+    print("guru_data в промпте:", guru_data)
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_tokens=2000,
+        )
+    except Exception as e:
+        print(f"Ошибка вызова client.chat.completions.create: {e}")
+        raise
 
     raw = response.choices[0].message.content.strip()
 
