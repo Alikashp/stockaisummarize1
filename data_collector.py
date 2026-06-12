@@ -1,10 +1,14 @@
+$ cat data_collector.py
+
 """
 Шаг 2.1 — Сбор данных по тикеру акции
 Использует: yfinance (бесплатно, без API-ключа)
 """
 
+import os
 import yfinance as yf
 import json
+import requests
 from datetime import datetime
 
 
@@ -102,6 +106,24 @@ def get_stock_data(ticker: str) -> dict:
             "summary": content.get("summary", "")[:300],
         })
 
+    # --- Данные GuruFocus ---
+    try:
+        gurufocus_api_key = os.getenv("GURUFOCUS_API_KEY")
+        guru_response = requests.get(
+            f"https://api.gurufocus.com/public/user/{gurufocus_api_key}/stock/{ticker}/summary"
+        )
+        guru_summary = guru_response.json().get("summary", {})
+        guru_data = {
+            "dcf_fair_value": guru_summary.get("dcf_msf"),
+            "gf_value": guru_summary.get("gf_value"),
+            "profitability_rank": guru_summary.get("rank_profitability"),
+            "financial_strength": guru_summary.get("rank_balancesheet"),
+            "warning_signs": guru_summary.get("warning_signs"),
+            "positive_signs": guru_summary.get("good_signs"),
+        }
+    except Exception:
+        guru_data = {}
+
     return {
         "key_indicators": key_indicators,
         "business": business,
@@ -109,6 +131,7 @@ def get_stock_data(ticker: str) -> dict:
         "growth": growth,
         "analyst": analyst,
         "news": news,
+        "guru_data": guru_data,
     }
 
 
