@@ -144,7 +144,6 @@ def get_stock_data(ticker: str) -> dict:
         "congress_trades": congress_trades,
     }
 
-
 def get_congress_trades(ticker: str) -> list:
     """Получает данные о сделках конгрессменов по тикеру"""
     import requests
@@ -168,13 +167,15 @@ def get_congress_trades(ticker: str) -> list:
                     "date": trade.get("TransactionDate", ""),
                     "chamber": trade.get("Chamber", ""),
                 })
+            print(f"Congress trades для {ticker}: найдено {len(result)} сделок")
+            print(f"Congress API статус: {resp.status_code}")
             return result
+        print(f"Congress API статус: {resp.status_code}")
         return []
     except Exception as e:
         print(f"Congress trades error: {e}")
         return []
-
-
+        
 def format_for_display(data: dict) -> str:
     """Красивый вывод в терминал для проверки."""
     ki = data["key_indicators"]
