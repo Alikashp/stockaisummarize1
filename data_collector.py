@@ -104,13 +104,14 @@ def get_stock_data(ticker: str) -> dict:
             "summary": content.get("summary", "")[:300],
         })
 
-            # --- Данные GuruFocus ---
+                # --- Данные GuruFocus ---
+    guru_data = {}
     try:
-        gurufocus_api_key = os.getenv("GURUFOCUS_API_KEY")
-        print(f"GuruFocus API key found: {bool(gurufocus_api_key)}")
-        guru_url = f"https://api.gurufocus.com/public/user/{gurufocus_api_key}/stock/{ticker}/summary"
-        print(f"GuruFocus request URL: https://api.gurufocus.com/public/user/***/stock/{ticker}/summary")
-        guru_response = requests.get(guru_url)
+        gf_key = os.getenv("GURUFOCUS_API_KEY")
+        print(f"GuruFocus API key found: {bool(gf_key)}")
+        guru_url = f"https://api.gurufocus.com/data/stocks/{ticker}/summary"
+        print(f"GuruFocus request URL: {guru_url}")
+        guru_response = requests.get(guru_url, headers={"Authorization": gf_key})
         print(f"GuruFocus response status: {guru_response.status_code}")
         print(f"GuruFocus response (first 200 chars): {guru_response.text[:200]}")
         gf_json = guru_response.json()
@@ -126,9 +127,8 @@ def get_stock_data(ticker: str) -> dict:
             "positive_signs": general.get("good_sign", []),
         }
         print(f"GuruFocus parsed guru_data: {guru_data}")
-    except Exception:
-        guru_data = {}
-
+    except Exception as e:
+        print(f"GuruFocus error: {e}")
 
 
 def format_for_display(data: dict) -> str:
