@@ -194,7 +194,7 @@ def get_politician_trades(ticker: str) -> list:
     """Получает данные о сделках политиков (Конгресс США) через Capitol Trades API"""
     politician_trades = []
     try:
-        url = "https://api.capitoltrades.com/trades"
+        url = "https://bff.capitoltrades.com/trades"
         params = {"ticker": ticker, "pageSize": 10}
         response = requests.get(url, params=params, timeout=10)
         response.raise_for_status()
