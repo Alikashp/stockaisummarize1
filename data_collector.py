@@ -4,6 +4,7 @@
 """
 
 import os
+import math
 import yfinance as yf
 import json
 import requests
@@ -143,21 +144,27 @@ def get_stock_data(ticker: str) -> dict:
         "insider_trades": insider_trades,
     }
 
-
 def get_insider_trades(stock) -> list:
     """Получает данные о сделках инсайдеров через Yahoo Finance"""
     insider_trades = []
     try:
         insiders = stock.insider_transactions
         if insiders is not None and not insiders.empty:
+            print(insiders.columns.tolist())
             for _, row in insiders.head(10).iterrows():
+                value = row.get("Value")
+                if value and not (isinstance(value, float) and math.isnan(value)):
+                    trade_value = value
+                else:
+                    trade_value = None
+
                 insider_trades.append({
                     "name": str(row.get("Insider", "")),
-                    "title": str(row.get("Title", "")),
+                    "title": str(row.get("Title") or row.get("Position", "")),
                     "transaction": str(row.get("Transaction", "")),
                     "shares": str(row.get("Shares", "")),
-                    "value": str(row.get("Value", "")),
-                    "date": str(row.get("Start Date", "")),
+                    "value": trade_value,
+                    "date": str(row.get("Start Date", ""))[:10],
                 })
     except Exception as e:
         print(f"Insider trades error: {e}")
