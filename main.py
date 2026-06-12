@@ -60,6 +60,7 @@ def analyze(request: AnalyzeRequest):
             "key_indicators": data["key_indicators"],
             "analyst": data["analyst"],
             "news": data["news"],
+            "insider_trades": data.get("insider_trades", []),
             "report": report,
         }
 
