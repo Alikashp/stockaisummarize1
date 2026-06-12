@@ -104,7 +104,7 @@ def get_stock_data(ticker: str) -> dict:
             "summary": content.get("summary", "")[:300],
         })
 
-                # --- Данные GuruFocus ---
+    # --- Данные GuruFocus ---
     guru_data = {}
     try:
         gf_key = os.getenv("GURUFOCUS_API_KEY")
@@ -129,6 +129,7 @@ def get_stock_data(ticker: str) -> dict:
         print(f"GuruFocus parsed guru_data: {guru_data}")
     except Exception as e:
         print(f"GuruFocus error: {e}")
+        $ grep -n "return {" data_collector.py
 
 
 def format_for_display(data: dict) -> str:
