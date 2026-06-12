@@ -191,38 +191,38 @@ def get_insider_trades(stock) -> list:
     return insider_trades
     
 def get_politician_trades(ticker: str) -> list:
-    """Получает данные о сделках политиков (Конгресс США) через Capitol Trades API"""
+    """Получает данные о сделках сенаторов через Senate Stock Watcher (открытый датасет, без ключа)"""
     politician_trades = []
     try:
-        url = "https://bff.capitoltrades.com/trades"
-        params = {"ticker": ticker, "pageSize": 10}
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-            "Accept": "application/json, text/plain, */*",
-            "Referer": "https://www.capitoltrades.com/",
-        }
-        response = requests.get(url, params=params, headers=headers, timeout=10)
+        url = "https://senate-stock-watcher-data.s3-us-west-2.amazonaws.com/aggregate/all_transactions.json"
+        response = requests.get(url, timeout=10)
         response.raise_for_status()
-        payload = response.json()
-        rows = payload.get("data", [])
 
-        for item in rows:
-            politician = item.get("politician", {})
-            asset = item.get("asset", {})
+        if int(response.headers.get("Content-Length", 0)) > 5 * 1024 * 1024:
+            url = "https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json"
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+
+        all_trades = response.json()
+        ticker_upper = ticker.upper()
+        trades_for_ticker = [
+            t for t in all_trades if str(t.get("ticker", "")).upper() == ticker_upper
+        ][:10]
+
+        for t in trades_for_ticker:
             politician_trades.append({
-                "name": politician.get("name", ""),
-                "party": politician.get("party", ""),
-                "chamber": politician.get("chamber", ""),
-                "transaction": item.get("txType", ""),
-                "amount_range": item.get("value", item.get("size", "")),
-                "trade_date": str(item.get("txDate", ""))[:10],
-                "disclosure_date": str(item.get("pubDate", ""))[:10],
-                "ticker": asset.get("assetTicker", ticker),
+                "senator": t.get("senator", ""),
+                "party": t.get("party", ""),
+                "transaction_date": t.get("transaction_date", ""),
+                "owner": t.get("owner", ""),
+                "asset_description": t.get("asset_description", ""),
+                "type": t.get("type", ""),
+                "amount": t.get("amount", ""),
             })
     except Exception as e:
         print(f"Politician trades error: {e}")
 
-    print(f"Politician trades: найдено {len(politician_trades)} сделок")
+    print(f"Politician trades: найдено {len(politician_trades)} сделок для {ticker}")
     return politician_trades
         
 def format_for_display(data: dict) -> str:
