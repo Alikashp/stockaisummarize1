@@ -1,3 +1,5 @@
+$ cat data_collector.py
+
 """
 Шаг 2.1 — Сбор данных по тикеру акции
 Использует: yfinance (бесплатно, без API-ключа)
@@ -131,6 +133,8 @@ def get_stock_data(ticker: str) -> dict:
         print(f"GuruFocus error: {e}")
         guru_data = {}
 
+    congress_trades = get_congress_trades(ticker.replace(".ME", ""))
+
     return {
         "key_indicators": key_indicators,
         "business": business,
@@ -139,7 +143,38 @@ def get_stock_data(ticker: str) -> dict:
         "analyst": analyst,
         "news": news,
         "guru_data": guru_data,
+        "congress_trades": congress_trades,
     }
+
+
+def get_congress_trades(ticker: str) -> list:
+    """Получает данные о сделках конгрессменов по тикеру"""
+    import requests
+    try:
+        url = f"https://api.quiverquant.com/beta/historical/congresstrading/{ticker}"
+        headers = {
+            "Accept": "application/json",
+            "X-CSRFToken": "null"
+        }
+        resp = requests.get(url, headers=headers, timeout=5)
+        if resp.status_code == 200:
+            trades = resp.json()
+            # Берём последние 10 сделок
+            result = []
+            for trade in trades[:10]:
+                result.append({
+                    "politician": trade.get("Representative", ""),
+                    "party": trade.get("Party", ""),
+                    "transaction": trade.get("Transaction", ""),
+                    "amount": trade.get("Range", ""),
+                    "date": trade.get("TransactionDate", ""),
+                    "chamber": trade.get("Chamber", ""),
+                })
+            return result
+        return []
+    except Exception as e:
+        print(f"Congress trades error: {e}")
+        return []
 
 
 def format_for_display(data: dict) -> str:
