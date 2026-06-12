@@ -144,6 +144,17 @@ def get_stock_data(ticker: str) -> dict:
         "insider_trades": insider_trades,
     }
 
+TRANSACTION_TRANSLATIONS = {
+    "Sale": "Продажа",
+    "Purchase": "Покупка",
+    "Stock Gift": "Дарение акций",
+    "Option Exercise": "Исполнение опциона",
+    "Stock Award": "Награждение акциями",
+    "Tax Withholding": "Уплата налога",
+    "Conversion of Exercise of derivative security": "Конвертация производной ценной бумаги",
+}
+
+
 def get_insider_trades(stock) -> list:
     """Получает данные о сделках инсайдеров через Yahoo Finance"""
     insider_trades = []
@@ -158,11 +169,15 @@ def get_insider_trades(stock) -> list:
                     trade_value = value
                 else:
                     trade_value = None
+                transaction = row.get("Transaction") or row.get("Text", "")
+                if " at price" in transaction:
+                    transaction = transaction.split(" at price")[0]
+                transaction = TRANSACTION_TRANSLATIONS.get(transaction, transaction)
 
                 insider_trades.append({
                     "name": str(row.get("Insider", "")),
                     "title": str(row.get("Title") or row.get("Position", "")),
-                    "transaction": str(row.get("Transaction", "")),
+                    "transaction": str(transaction),
                     "shares": str(row.get("Shares", "")),
                     "value": trade_value,
                     "date": str(row.get("Start Date", ""))[:10],
