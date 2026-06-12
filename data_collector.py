@@ -151,6 +151,7 @@ def get_insider_trades(stock) -> list:
         insiders = stock.insider_transactions
         if insiders is not None and not insiders.empty:
             print(insiders.columns.tolist())
+            print(insiders.head(2).to_dict())
             for _, row in insiders.head(10).iterrows():
                 value = row.get("Value")
                 if value and not (isinstance(value, float) and math.isnan(value)):
