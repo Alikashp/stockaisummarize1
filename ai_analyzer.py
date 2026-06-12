@@ -26,6 +26,13 @@ def generate_report(data: dict) -> dict:
     news = data["news"]
     guru_data = data.get("guru_data", {})
 
+    congress = data.get("congress_trades", [])
+    congress_text = ""
+    if congress:
+        congress_text = "Сделки конгрессменов США:\n"
+        for t in congress[:5]:
+            congress_text += f"- {t['politician']} ({t['party']}): {t['transaction']} на сумму {t['amount']} ({t['date']})\n"
+
     # Форматируем новости для промпта
     news_text = "\n".join(
         f"- {n['title']}" for n in news if n.get("title")
@@ -72,6 +79,8 @@ GF Value: {guru_data.get('gf_value', 'Н/Д')}
 Рейтинг роста: {guru_data.get('growth_rank', 'Н/Д')}
 Предупреждения: {guru_data.get('warning_signs', [])}
 Позитивные сигналы: {guru_data.get('positive_signs', [])}
+
+{congress_text}
 
 ЗАДАЧА: Верни ТОЛЬКО валидный JSON без markdown-обёртки, без ```json, без пояснений.
 
