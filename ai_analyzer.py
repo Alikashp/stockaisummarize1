@@ -25,13 +25,13 @@ def generate_report(data: dict) -> dict:
     an = data["analyst"]
     news = data["news"]
     guru_data = data.get("guru_data", {})
-
-    congress = data.get("congress_trades", [])
+    
+    insiders = data.get("insider_trades", [])
     congress_text = ""
-    if congress:
-        congress_text = "Сделки конгрессменов США:\n"
-        for t in congress[:5]:
-            congress_text += f"- {t['politician']} ({t['party']}): {t['transaction']} на сумму {t['amount']} ({t['date']})\n"
+    if insiders:
+        congress_text = "Сделки инсайдеров компании:\n"
+        for t in insiders[:5]:
+            congress_text += f"- {t['name']} ({t['title']}): {t['transaction']} {t['shares']} акций на сумму {t['value']} ({t['date']})\n"
 
     # Форматируем новости для промпта
     news_text = "\n".join(
