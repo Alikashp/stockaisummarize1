@@ -132,6 +132,7 @@ def get_stock_data(ticker: str) -> dict:
         print(f"GuruFocus error: {e}")
         guru_data = {}
     insider_trades = get_insider_trades(stock)
+    politician_trades = get_politician_trades(ticker)
 
     return {
         "key_indicators": key_indicators,
@@ -142,6 +143,7 @@ def get_stock_data(ticker: str) -> dict:
         "news": news,
         "guru_data": guru_data,
         "insider_trades": insider_trades,
+        "politician_trades": politician_trades,
     }
 
 TRANSACTION_TRANSLATIONS = {
@@ -187,6 +189,36 @@ def get_insider_trades(stock) -> list:
 
     print(f"Insider trades: найдено {len(insider_trades)} сделок")
     return insider_trades
+    
+def get_politician_trades(ticker: str) -> list:
+    """Получает данные о сделках политиков (Конгресс США) через Capitol Trades API"""
+    politician_trades = []
+    try:
+        url = "https://api.capitoltrades.com/trades"
+        params = {"ticker": ticker, "pageSize": 10}
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        payload = response.json()
+        rows = payload.get("data", [])
+
+        for item in rows:
+            politician = item.get("politician", {})
+            asset = item.get("asset", {})
+            politician_trades.append({
+                "name": politician.get("name", ""),
+                "party": politician.get("party", ""),
+                "chamber": politician.get("chamber", ""),
+                "transaction": item.get("txType", ""),
+                "amount_range": item.get("value", item.get("size", "")),
+                "trade_date": str(item.get("txDate", ""))[:10],
+                "disclosure_date": str(item.get("pubDate", ""))[:10],
+                "ticker": asset.get("assetTicker", ticker),
+            })
+    except Exception as e:
+        print(f"Politician trades error: {e}")
+
+    print(f"Politician trades: найдено {len(politician_trades)} сделок")
+    return politician_trades
         
 def format_for_display(data: dict) -> str:
     """Красивый вывод в терминал для проверки."""
