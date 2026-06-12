@@ -130,8 +130,7 @@ def get_stock_data(ticker: str) -> dict:
     except Exception as e:
         print(f"GuruFocus error: {e}")
         guru_data = {}
-
-    congress_trades = get_congress_trades(ticker.replace(".ME", ""))
+    insider_trades = get_insider_trades(stock)
 
     return {
         "key_indicators": key_indicators,
@@ -141,40 +140,30 @@ def get_stock_data(ticker: str) -> dict:
         "analyst": analyst,
         "news": news,
         "guru_data": guru_data,
-        "congress_trades": congress_trades,
+        "insider_trades": insider_trades,
     }
 
-def get_congress_trades(ticker: str) -> list:
-    """Получает данные о сделках конгрессменов по тикеру"""
-    import requests
+
+def get_insider_trades(stock) -> list:
+    """Получает данные о сделках инсайдеров через Yahoo Finance"""
+    insider_trades = []
     try:
-        url = f"https://api.quiverquant.com/beta/historical/congresstrading/{ticker}"
-        headers = {
-            "Accept": "application/json",
-            "X-CSRFToken": "null"
-        }
-        resp = requests.get(url, headers=headers, timeout=5)
-        if resp.status_code == 200:
-            trades = resp.json()
-            # Берём последние 10 сделок
-            result = []
-            for trade in trades[:10]:
-                result.append({
-                    "politician": trade.get("Representative", ""),
-                    "party": trade.get("Party", ""),
-                    "transaction": trade.get("Transaction", ""),
-                    "amount": trade.get("Range", ""),
-                    "date": trade.get("TransactionDate", ""),
-                    "chamber": trade.get("Chamber", ""),
+        insiders = stock.insider_transactions
+        if insiders is not None and not insiders.empty:
+            for _, row in insiders.head(10).iterrows():
+                insider_trades.append({
+                    "name": str(row.get("Insider", "")),
+                    "title": str(row.get("Title", "")),
+                    "transaction": str(row.get("Transaction", "")),
+                    "shares": str(row.get("Shares", "")),
+                    "value": str(row.get("Value", "")),
+                    "date": str(row.get("Start Date", "")),
                 })
-            print(f"Congress trades для {ticker}: найдено {len(result)} сделок")
-            print(f"Congress API статус: {resp.status_code}")
-            return result
-        print(f"Congress API статус: {resp.status_code}")
-        return []
     except Exception as e:
-        print(f"Congress trades error: {e}")
-        return []
+        print(f"Insider trades error: {e}")
+
+    print(f"Insider trades: найдено {len(insider_trades)} сделок")
+    return insider_trades
         
 def format_for_display(data: dict) -> str:
     """Красивый вывод в терминал для проверки."""
