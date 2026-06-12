@@ -61,6 +61,7 @@ def analyze(request: AnalyzeRequest):
             "analyst": data["analyst"],
             "news": data["news"],
             "insider_trades": data.get("insider_trades", []),
+            "politician_trades": data.get("politician_trades", []),
             "report": report,
         }
 
