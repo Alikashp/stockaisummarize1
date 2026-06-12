@@ -104,7 +104,7 @@ def get_stock_data(ticker: str) -> dict:
             "summary": content.get("summary", "")[:300],
         })
 
-        # --- Данные GuruFocus ---
+            # --- Данные GuruFocus ---
     try:
         gurufocus_api_key = os.getenv("GURUFOCUS_API_KEY")
         print(f"GuruFocus API key found: {bool(gurufocus_api_key)}")
@@ -113,15 +113,19 @@ def get_stock_data(ticker: str) -> dict:
         guru_response = requests.get(guru_url)
         print(f"GuruFocus response status: {guru_response.status_code}")
         print(f"GuruFocus response (first 200 chars): {guru_response.text[:200]}")
-        guru_summary = guru_response.json().get("summary", {})
+        gf_json = guru_response.json()
+        general = gf_json.get("summary", {}).get("general", {})
         guru_data = {
-            "dcf_fair_value": guru_summary.get("dcf_msf"),
-            "gf_value": guru_summary.get("gf_value"),
-            "profitability_rank": guru_summary.get("rank_profitability"),
-            "financial_strength": guru_summary.get("rank_balancesheet"),
-            "warning_signs": guru_summary.get("warning_signs"),
-            "positive_signs": guru_summary.get("good_signs"),
+            "gf_score": general.get("gf_score"),
+            "dcf_fair_value": general.get("price_dcf_projected_fcf"),
+            "gf_value": general.get("gf_value"),
+            "profitability_rank": general.get("rank_profitability"),
+            "financial_strength": general.get("rank_financial_strength"),
+            "growth_rank": general.get("rank_growth"),
+            "warning_signs": general.get("warning_sign", []),
+            "positive_signs": general.get("good_sign", []),
         }
+        print(f"GuruFocus parsed guru_data: {guru_data}")
     except Exception:
         guru_data = {}
 
