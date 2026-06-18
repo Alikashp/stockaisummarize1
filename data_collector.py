@@ -133,6 +133,7 @@ def get_stock_data(ticker: str) -> dict:
         guru_data = {}
     insider_trades = get_insider_trades(stock)
     politician_trades = get_politician_trades(ticker)
+    price_history, revenue_history = get_price_history(ticker)
 
     return {
         "key_indicators": key_indicators,
@@ -144,6 +145,8 @@ def get_stock_data(ticker: str) -> dict:
         "guru_data": guru_data,
         "insider_trades": insider_trades,
         "politician_trades": politician_trades,
+        "price_history": price_history,
+        "revenue_history": revenue_history,
     }
 
 TRANSACTION_TRANSLATIONS = {
@@ -191,28 +194,28 @@ def get_insider_trades(stock) -> list:
     return insider_trades
     
 def get_politician_trades(ticker: str) -> list:
-    """Получает данные о сделках сенаторов через Senate Stock Watcher (открытый датасет, без ключа)"""
+    """Получает данные о сделках конгрессменов через Quiver Quantitative API"""
     politician_trades = []
     try:
-        url = "https://raw.githubusercontent.com/timothycarambat/senate-stock-watcher-data/master/aggregate/all_transactions.json"
-        response = requests.get(url, timeout=10)
+        quiver_key = os.getenv("QUIVER_API_KEY")
+        url = f"https://api.quiverquant.com/beta/historical/congresstrading/{ticker.upper()}"
+        response = requests.get(
+            url,
+            headers={"Authorization": f"Bearer {quiver_key}", "Accept": "application/json"},
+            timeout=10,
+        )
         response.raise_for_status()
 
         all_trades = response.json()
-        ticker_upper = ticker.upper()
-        trades_for_ticker = [
-            t for t in all_trades if str(t.get("ticker", "")).upper() == ticker_upper
-        ][:10]
-
-        for t in trades_for_ticker:
+        for t in all_trades[:10]:
             politician_trades.append({
-                "senator": t.get("senator", ""),
-                "party": t.get("party", ""),
-                "transaction_date": t.get("transaction_date", ""),
-                "owner": t.get("owner", ""),
-                "asset_description": t.get("asset_description", ""),
-                "type": t.get("type", ""),
-                "amount": t.get("amount", ""),
+                "senator": t.get("Representative", ""),
+                "party": t.get("Party", ""),
+                "transaction_date": t.get("TransactionDate", ""),
+                "owner": t.get("House", ""),
+                "asset_description": t.get("Ticker", ticker.upper()),
+                "type": t.get("Transaction", ""),
+                "amount": t.get("Range") or t.get("Amount", ""),
             })
     except Exception as e:
         print(f"Politician trades error: {e}")
@@ -220,6 +223,42 @@ def get_politician_trades(ticker: str) -> list:
     print(f"Politician trades: найдено {len(politician_trades)} сделок для {ticker}")
     return politician_trades
         
+def get_price_history(ticker: str):
+    """Получает историю цены за 1 год и квартальную выручку через yfinance"""
+    price_history = []
+    revenue_history = []
+
+    try:
+        stock = yf.Ticker(ticker)
+        hist = stock.history(period="1y", interval="1wk")
+        for date, row in hist.iterrows():
+            price_history.append({
+                "date": date.strftime("%Y-%m-%d"),
+                "price": round(float(row["Close"]), 2),
+            })
+    except Exception as e:
+        print(f"Price history error: {e}")
+        price_history = []
+
+    try:
+        stock = yf.Ticker(ticker)
+        financials = stock.quarterly_financials
+        if financials is not None and not financials.empty and "Total Revenue" in financials.index:
+            revenue_row = financials.loc["Total Revenue"].dropna().iloc[:8]
+            for date, value in revenue_row.items():
+                quarter_label = f"Q{(date.month - 1) // 3 + 1} {date.year}"
+                revenue_history.append({
+                    "quarter": quarter_label,
+                    "revenue": round(float(value) / 1_000_000_000, 2),
+                })
+            revenue_history = list(reversed(revenue_history))
+    except Exception as e:
+        print(f"Revenue history error: {e}")
+        revenue_history = []
+
+    return price_history, revenue_history
+
+
 def format_for_display(data: dict) -> str:
     """Красивый вывод в терминал для проверки."""
     ki = data["key_indicators"]
