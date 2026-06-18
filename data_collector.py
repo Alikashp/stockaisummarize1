@@ -194,14 +194,9 @@ def get_politician_trades(ticker: str) -> list:
     """Получает данные о сделках сенаторов через Senate Stock Watcher (открытый датасет, без ключа)"""
     politician_trades = []
     try:
-        url = "https://senate-stock-watcher-data.s3-us-west-2.amazonaws.com/aggregate/all_transactions.json"
+        url = "https://raw.githubusercontent.com/timothycarambat/senate-stock-watcher-data/master/aggregate/all_transactions.json"
         response = requests.get(url, timeout=10)
         response.raise_for_status()
-
-        if int(response.headers.get("Content-Length", 0)) > 5 * 1024 * 1024:
-            url = "https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json"
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
 
         all_trades = response.json()
         ticker_upper = ticker.upper()
