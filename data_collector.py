@@ -94,15 +94,21 @@ def get_stock_data(ticker: str) -> dict:
         "number_of_analysts": info.get("numberOfAnalystOpinions"),
     }
 
-    # --- Последние новости (до 5 штук) ---
+     # --- Последние новости (до 5 штук) ---
     news_raw = stock.news or []
     news = []
     for item in news_raw[:5]:
         content = item.get("content", {})
+        link = (
+            content.get("canonicalUrl", {}).get("url")
+            or content.get("clickThroughUrl", {}).get("url")
+            or item.get("link", "")
+        )
         news.append({
             "title": content.get("title", item.get("title", "")),
             "date": content.get("pubDate", ""),
             "summary": content.get("summary", "")[:300],
+            "link": link,
         })
 
     # --- Данные GuruFocus ---
