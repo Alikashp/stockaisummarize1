@@ -14,7 +14,7 @@ from datetime import datetime
 def get_stock_data(ticker: str) -> dict:
     """Собирает все нужные данные по тикеру для ИИ-анализа."""
 
-    # Если тикер без точки и состоит только из кириллицы или 
+    # Если тикер без точки и состоит только из кириллицы или
     # это известный паттерн MOEX — добавляем .ME
     # Пользователь может ввести SBER, GAZP, LKOH и любой другой
     if "." not in ticker:
@@ -24,9 +24,9 @@ def get_stock_data(ticker: str) -> dict:
         if not test_info.get("regularMarketPrice") and not test_info.get("currentPrice"):
             # Данных нет — пробуем как российский
             ticker = ticker.upper() + ".ME"
-    
+
     currency_symbol = "₽" if ".ME" in ticker else "$"
-    
+
     stock = yf.Ticker(ticker)
     info = stock.info
 
@@ -140,6 +140,7 @@ def get_stock_data(ticker: str) -> dict:
     insider_trades = get_insider_trades(stock)
     politician_trades = get_politician_trades(ticker)
     price_history, revenue_history = get_price_history(ticker)
+    analyst_ratings = get_analyst_ratings(stock)
 
     return {
         "key_indicators": key_indicators,
@@ -147,6 +148,7 @@ def get_stock_data(ticker: str) -> dict:
         "financial_health": financial_health,
         "growth": growth,
         "analyst": analyst,
+        "analyst_ratings": analyst_ratings,
         "news": news,
         "guru_data": guru_data,
         "insider_trades": insider_trades,
@@ -198,7 +200,27 @@ def get_insider_trades(stock) -> list:
 
     print(f"Insider trades: найдено {len(insider_trades)} сделок")
     return insider_trades
-    
+
+def get_analyst_ratings(stock) -> list:
+    """Получает последние рейтинги/действия аналитических банков через Yahoo Finance"""
+    analyst_ratings = []
+    try:
+        recommendations = stock.recommendations
+        if recommendations is not None and not recommendations.empty:
+            recent = recommendations.tail(10)
+            for _, row in recent.iterrows():
+                analyst_ratings.append({
+                    "firm": str(row.get("Firm", "")),
+                    "to_grade": str(row.get("To Grade", "")),
+                    "action": str(row.get("Action", "")),
+                    "date": str(row.name)[:10],
+                })
+    except Exception as e:
+        print(f"Analyst ratings error: {e}")
+
+    print(f"Analyst ratings: найдено {len(analyst_ratings)} рейтингов")
+    return analyst_ratings
+
 def get_politician_trades(ticker: str) -> list:
     """Получает данные о сделках конгрессменов через Quiver Quantitative API"""
     politician_trades = []
@@ -228,7 +250,7 @@ def get_politician_trades(ticker: str) -> list:
 
     print(f"Politician trades: найдено {len(politician_trades)} сделок для {ticker}")
     return politician_trades
-        
+
 def get_price_history(ticker: str):
     """Получает историю цены за 1 год и квартальную выручку через yfinance"""
     price_history = []
