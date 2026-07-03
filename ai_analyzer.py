@@ -25,7 +25,8 @@ def generate_report(data: dict) -> dict:
     an = data["analyst"]
     news = data["news"]
     guru_data = data.get("guru_data", {})
-    
+    calculated_ratings = ki.get("calculated_ratings", {})
+
     insiders = data.get("insider_trades", [])
     congress_text = ""
     if insiders:
@@ -38,7 +39,13 @@ def generate_report(data: dict) -> dict:
         f"- {n['title']}" for n in news if n.get("title")
     ) or "Нет данных"
 
-    prompt =  f"""КРИТИЧЕСКИ ВАЖНО:
+    # Готовые рейтинги (рассчитаны точно по формулам, не угадываются ИИ)
+    cr_score = calculated_ratings.get("score", 5)
+    cr_growth = calculated_ratings.get("growth_rating", 5)
+    cr_profit = calculated_ratings.get("profitability_rating", 5)
+    cr_cashflow = calculated_ratings.get("cashflow_rating", 5)
+
+    prompt = f"""КРИТИЧЕСКИ ВАЖНО:
 1. Весь ответ строго на русском языке
 2. Пиши как умный друг-аналитик, не как робот
 3. Конкретика вместо общих слов
@@ -84,6 +91,12 @@ GF Value: {guru_data.get('gf_value', 'Н/Д')}
 
 {congress_text}
 
+ФИНАНСОВЫЕ РЕЙТИНГИ (рассчитаны точно по формулам — используй их как есть, не меняй цифры):
+Общий балл: {cr_score}/10
+Рост: {cr_growth}/10
+Рентабельность: {cr_profit}/10
+Денежный поток: {cr_cashflow}/10
+
 ЗАДАЧА: Верни ТОЛЬКО валидный JSON без markdown-обёртки, без ```json, без пояснений.
 
 Формат ответа:
@@ -116,11 +129,11 @@ GF Value: {guru_data.get('gf_value', 'Н/Д')}
     "threats": ["Угроза 1", "Угроза 2", "Угроза 3"]
   }},
   "financial_health": {{
-    "score": число от 1 до 10,
-    "growth_rating": число от 1 до 10,
-    "profitability_rating": число от 1 до 10,
-    "cashflow_rating": число от 1 до 10,
-    "comment": "2-3 предложения о финансовом состоянии живым языком"
+    "score": {cr_score},
+    "growth_rating": {cr_growth},
+    "profitability_rating": {cr_profit},
+    "cashflow_rating": {cr_cashflow},
+    "comment": "2-3 предложения о финансовом состоянии живым языком, опираясь на эти рейтинги"
   }},
   "fair_value": {{
     "estimate": число (твоя оценка справедливой цены в $),
@@ -130,8 +143,9 @@ GF Value: {guru_data.get('gf_value', 'Н/Д')}
   "interest_level": "Интересна для изучения / Требует осторожности / Не время",
   "interest_reason": "Одно предложение почему именно такой вывод"
 }}"""
-    
+
     print("guru_data в промпте:", guru_data)
+    print(f"calculated_ratings: {calculated_ratings}")
 
     try:
         response = client.chat.completions.create(
@@ -165,7 +179,7 @@ if __name__ == "__main__":
     report = generate_report(data)
 
     print("\n--- EXECUTIVE SUMMARY ---")
-    print(report["executive_summary"])
+    print(report["what_is_happening"])
 
     print("\n--- FAIR VALUE ---")
     fv = report["fair_value"]
