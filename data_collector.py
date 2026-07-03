@@ -141,6 +141,8 @@ def get_stock_data(ticker: str) -> dict:
     politician_trades = get_politician_trades(ticker)
     price_history, revenue_history = get_price_history(ticker)
     analyst_ratings = get_analyst_ratings(stock)
+    calculated_ratings = calculate_financial_ratings(info)
+    key_indicators["calculated_ratings"] = calculated_ratings
 
     return {
         "key_indicators": key_indicators,
@@ -200,6 +202,43 @@ def get_insider_trades(stock) -> list:
 
     print(f"Insider trades: найдено {len(insider_trades)} сделок")
     return insider_trades
+
+def calculate_financial_ratings(info: dict) -> dict:
+    """Считает финансовые рейтинги по формулам на основе данных yfinance."""
+    def score_metric(value, thresholds):
+        if value is None:
+            return 5
+        for threshold, score in thresholds:
+            if value >= threshold:
+                return score
+        return 1
+
+    revenue_growth = info.get("revenueGrowth", 0) or 0
+    earnings_growth = info.get("earningsGrowth", 0) or 0
+    profit_margin = info.get("profitMargins", 0) or 0
+    roe = info.get("returnOnEquity", 0) or 0
+    debt_to_equity = info.get("debtToEquity", 0) or 0
+
+    growth_score = score_metric(revenue_growth, [(0.25, 10), (0.15, 8), (0.08, 6), (0, 4), (-999, 1)])
+    earnings_score = score_metric(earnings_growth, [(0.25, 10), (0.15, 8), (0.08, 6), (0, 4), (-999, 1)])
+    growth_rating = round(growth_score * 0.6 + earnings_score * 0.4)
+
+    margin_score = score_metric(profit_margin, [(0.25, 10), (0.15, 8), (0.08, 6), (0, 4), (-999, 1)])
+    roe_score = score_metric(roe, [(0.25, 10), (0.15, 8), (0.08, 6), (0, 4), (-999, 1)])
+    profitability_rating = round(margin_score * 0.6 + roe_score * 0.4)
+
+    debt_score = 10 if debt_to_equity < 30 else 7 if debt_to_equity < 60 else 4 if debt_to_equity < 100 else 2
+    cashflow_rating = round(profitability_rating * 0.5 + debt_score * 0.5)
+
+    overall_score = round(growth_rating * 0.3 + profitability_rating * 0.35 + cashflow_rating * 0.35)
+
+    return {
+        "score": max(1, min(10, overall_score)),
+        "growth_rating": max(1, min(10, growth_rating)),
+        "profitability_rating": max(1, min(10, profitability_rating)),
+        "cashflow_rating": max(1, min(10, cashflow_rating)),
+    }
+
 
 def get_analyst_ratings(stock) -> list:
     """Получает последние рейтинги/действия аналитических банков через Yahoo Finance"""
