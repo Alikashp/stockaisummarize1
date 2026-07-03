@@ -59,6 +59,7 @@ def analyze(request: AnalyzeRequest):
             "ticker": ticker,
             "key_indicators": data["key_indicators"],
             "analyst": data["analyst"],
+            "analyst_ratings": data.get("analyst_ratings", []),
             "news": data["news"],
             "insider_trades": data.get("insider_trades", []),
             "politician_trades": data.get("politician_trades", []),
