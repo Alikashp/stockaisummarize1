@@ -205,15 +205,18 @@ def get_analyst_ratings(stock) -> list:
     """Получает последние рейтинги/действия аналитических банков через Yahoo Finance"""
     analyst_ratings = []
     try:
-        recommendations = stock.recommendations
-        if recommendations is not None and not recommendations.empty:
-            recent = recommendations.tail(10)
-            for _, row in recent.iterrows():
+        upgrades = stock.upgrades_downgrades
+        if upgrades is not None and not upgrades.empty:
+            recent = upgrades.head(10)
+            for date, row in recent.iterrows():
+                to_grade = str(row.get("ToGrade") or row.get("To Grade") or "")
+                action = str(row.get("Action") or "")
+                firm = str(row.get("Firm") or "")
                 analyst_ratings.append({
-                    "firm": str(row.get("Firm", "")),
-                    "to_grade": str(row.get("To Grade", "")),
-                    "action": str(row.get("Action", "")),
-                    "date": str(row.name)[:10],
+                    "firm": firm,
+                    "to_grade": to_grade,
+                    "action": action,
+                    "date": str(date)[:10],
                 })
     except Exception as e:
         print(f"Analyst ratings error: {e}")
