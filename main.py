@@ -4,11 +4,25 @@ POST /analyze — принимает тикер, возвращает полны
 GET  /health  — проверка что сервер работает
 """
 
+import math
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from data_collector import get_stock_data
 from ai_analyzer import generate_report
+
+
+def sanitize(obj):
+    """Рекурсивно заменяет nan/inf на None — стандартный JSON их не поддерживает."""
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    if isinstance(obj, dict):
+        return {k: sanitize(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [sanitize(v) for v in obj]
+    return obj
 
 app = FastAPI(
     title="Stock AI Analyzer",
@@ -54,8 +68,8 @@ def analyze(request: AnalyzeRequest):
         # Шаг 2 — ИИ-анализ
         report = generate_report(data)
 
-        # Возвращаем всё вместе
-        return {
+        # Возвращаем всё вместе (sanitize убирает nan/inf, которые не валидны в JSON)
+        return sanitize({
             "ticker": ticker,
             "key_indicators": data["key_indicators"],
             "analyst": data["analyst"],
@@ -68,7 +82,7 @@ def analyze(request: AnalyzeRequest):
             "price_history": data.get("price_history", []),
             "revenue_history": data.get("revenue_history", []),
             "report": report,
-        }
+        })
 
     except HTTPException:
         raise
