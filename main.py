@@ -74,6 +74,7 @@ def analyze(request: AnalyzeRequest):
             "key_indicators": data["key_indicators"],
             "analyst": data["analyst"],
             "analyst_ratings": data.get("analyst_ratings", []),
+            "price_history_multi": data.get("price_history_multi", {}),
             "annual_financials": data.get("annual_financials", []),
             "recommendation_trend": data.get("recommendation_trend", {}),
             "news": data["news"],
