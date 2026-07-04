@@ -142,6 +142,7 @@ def get_stock_data(ticker: str) -> dict:
     politician_trades = get_politician_trades(ticker)
     price_history, revenue_history = get_price_history(ticker)
     analyst_ratings = get_analyst_ratings(stock)
+    price_history_multi = get_price_history_multi(stock)
     calculated_ratings = calculate_financial_ratings(info)
     key_indicators["calculated_ratings"] = calculated_ratings
     annual_financials = get_annual_financials(stock)
@@ -154,6 +155,7 @@ def get_stock_data(ticker: str) -> dict:
         "growth": growth,
         "analyst": analyst,
         "analyst_ratings": analyst_ratings,
+        "price_history_multi": price_history_multi,
         "annual_financials": annual_financials,
         "recommendation_trend": recommendation_trend,
         "news": news,
@@ -347,6 +349,45 @@ def get_politician_trades(ticker: str) -> list:
 
     print(f"Politician trades: найдено {len(politician_trades)} сделок для {ticker}")
     return politician_trades
+
+def get_price_history_multi(stock) -> dict:
+    """История цены для разных таймфреймов."""
+    periods = {
+        "1d":  ("1d",  "5m"),
+        "5d":  ("5d",  "15m"),
+        "1m":  ("1mo", "1d"),
+        "6m":  ("6mo", "1d"),
+        "1y":  ("1y",  "1wk"),
+        "5y":  ("5y",  "1mo"),
+        "10y": ("10y", "3mo"),
+        "all": ("max", "3mo"),
+    }
+    result = {}
+    for key, (period, interval) in periods.items():
+        try:
+            hist = stock.history(period=period, interval=interval)
+            if not hist.empty:
+                prices = []
+                for idx, row in hist.iterrows():
+                    try:
+                        price = float(row["Close"])
+                        if math.isfinite(price):
+                            date_str = str(idx.date()) if hasattr(idx, "date") else str(idx)[:10]
+                            prices.append({"date": date_str, "price": round(price, 2)})
+                    except (TypeError, ValueError):
+                        continue
+                first_price = prices[0]["price"] if prices else None
+                last_price = prices[-1]["price"] if prices else None
+                change_pct = round((last_price - first_price) / first_price * 100, 2) if first_price else None
+                result[key] = {"data": prices, "change_pct": change_pct}
+            else:
+                result[key] = {"data": [], "change_pct": None}
+        except Exception as e:
+            print(f"Price history error for {key}: {e}")
+            result[key] = {"data": [], "change_pct": None}
+    print(f"Price history multi: собрано {len(result)} таймфреймов")
+    return result
+
 
 def get_price_history(ticker: str):
     """Получает историю цены за 1 год и квартальную выручку через yfinance"""
