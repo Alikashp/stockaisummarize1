@@ -48,6 +48,7 @@ def get_stock_data(ticker: str) -> dict:
         "peg_ratio": info.get("pegRatio"),
         "ev_ebitda": info.get("enterpriseToEbitda"),
         "price_to_book": info.get("priceToBook"),
+        "price_to_sales": info.get("priceToSalesTrailing12Months"),
         "revenue": info.get("totalRevenue"),
         "gross_margin": info.get("grossMargins"),
         "profit_margin": info.get("profitMargins"),
@@ -143,6 +144,8 @@ def get_stock_data(ticker: str) -> dict:
     analyst_ratings = get_analyst_ratings(stock)
     calculated_ratings = calculate_financial_ratings(info)
     key_indicators["calculated_ratings"] = calculated_ratings
+    annual_financials = get_annual_financials(stock)
+    recommendation_trend = get_recommendation_trend(stock)
 
     return {
         "key_indicators": key_indicators,
@@ -151,6 +154,8 @@ def get_stock_data(ticker: str) -> dict:
         "growth": growth,
         "analyst": analyst,
         "analyst_ratings": analyst_ratings,
+        "annual_financials": annual_financials,
+        "recommendation_trend": recommendation_trend,
         "news": news,
         "guru_data": guru_data,
         "insider_trades": insider_trades,
@@ -238,6 +243,47 @@ def calculate_financial_ratings(info: dict) -> dict:
         "profitability_rating": max(1, min(10, profitability_rating)),
         "cashflow_rating": max(1, min(10, cashflow_rating)),
     }
+
+
+def get_annual_financials(stock) -> list:
+    """Годовая выручка и чистая прибыль из финансовых отчётов yfinance."""
+    annual = []
+    try:
+        financials = stock.financials
+        if financials is not None and not financials.empty:
+            revenue_row = financials.loc["Total Revenue"] if "Total Revenue" in financials.index else None
+            income_row = financials.loc["Net Income"] if "Net Income" in financials.index else None
+            for col in financials.columns[:5]:
+                year = str(col.year) if hasattr(col, "year") else str(col)[:4]
+                annual.append({
+                    "year": year,
+                    "revenue": round(float(revenue_row[col]) / 1_000_000_000, 2) if revenue_row is not None and revenue_row[col] is not None else None,
+                    "net_income": round(float(income_row[col]) / 1_000_000_000, 2) if income_row is not None and income_row[col] is not None else None,
+                })
+        annual.reverse()
+    except Exception as e:
+        print(f"Annual financials error: {e}")
+
+    print(f"Annual financials: найдено {len(annual)} лет")
+    return annual
+
+
+def get_recommendation_trend(stock) -> dict:
+    """Агрегированные рекомендации аналитиков (strongBuy/buy/hold/sell/strongSell)."""
+    try:
+        trend = stock.recommendations_summary
+        if trend is not None and not trend.empty:
+            latest = trend.iloc[0]
+            return {
+                "strong_buy": int(latest.get("strongBuy", 0)),
+                "buy": int(latest.get("buy", 0)),
+                "hold": int(latest.get("hold", 0)),
+                "sell": int(latest.get("sell", 0)),
+                "strong_sell": int(latest.get("strongSell", 0)),
+            }
+    except Exception as e:
+        print(f"Recommendation trend error: {e}")
+    return {}
 
 
 def get_analyst_ratings(stock) -> list:
