@@ -253,13 +253,22 @@ def get_annual_financials(stock) -> list:
         if financials is not None and not financials.empty:
             revenue_row = financials.loc["Total Revenue"] if "Total Revenue" in financials.index else None
             income_row = financials.loc["Net Income"] if "Net Income" in financials.index else None
+
+            def safe_val(row, col):
+                if row is None:
+                    return None
+                try:
+                    v = float(row[col])
+                    return round(v / 1_000_000_000, 2) if math.isfinite(v) else None
+                except (TypeError, ValueError):
+                    return None
+
             for col in financials.columns[:5]:
                 year = str(col.year) if hasattr(col, "year") else str(col)[:4]
-                annual.append({
-                    "year": year,
-                    "revenue": round(float(revenue_row[col]) / 1_000_000_000, 2) if revenue_row is not None and revenue_row[col] is not None else None,
-                    "net_income": round(float(income_row[col]) / 1_000_000_000, 2) if income_row is not None and income_row[col] is not None else None,
-                })
+                revenue = safe_val(revenue_row, col)
+                net_income = safe_val(income_row, col)
+                if revenue is not None:
+                    annual.append({"year": year, "revenue": revenue, "net_income": net_income})
         annual.reverse()
     except Exception as e:
         print(f"Annual financials error: {e}")
