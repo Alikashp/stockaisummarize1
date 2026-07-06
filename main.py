@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from data_collector import get_stock_data
 from ai_analyzer import generate_report
+from earnings_analyzer import analyze_earnings_call
 
 
 def sanitize(obj):
@@ -83,8 +84,25 @@ def analyze(request: AnalyzeRequest):
             "price_history": data.get("price_history", []),
             "revenue_history": data.get("revenue_history", []),
             "report": report,
+            "earnings_transcript_available": bool(data.get("earnings_transcript")),
         })
 
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/earnings-call/{ticker}")
+def get_earnings_call_analysis(ticker: str):
+    ticker = ticker.upper().strip()
+    try:
+        data = get_stock_data(ticker)
+        transcript = data.get("earnings_transcript")
+        if not transcript:
+            raise HTTPException(status_code=404, detail="Транскрипт недоступен для этого тикера")
+        analysis = analyze_earnings_call(transcript, ticker)
+        return {"ticker": ticker, "transcript_date": transcript.get("date"), "analysis": analysis}
     except HTTPException:
         raise
     except Exception as e:
