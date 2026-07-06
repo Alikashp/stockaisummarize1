@@ -367,12 +367,19 @@ def get_price_history_multi(stock) -> dict:
         try:
             hist = stock.history(period=period, interval=interval)
             if not hist.empty:
+                intraday = key in ("1d", "5d")
                 prices = []
                 for idx, row in hist.iterrows():
                     try:
                         price = float(row["Close"])
                         if math.isfinite(price):
-                            date_str = str(idx.date()) if hasattr(idx, "date") else str(idx)[:10]
+                            if intraday:
+                                # сохраняем дату и время для интрадей
+                                date_str = idx.strftime("%m-%d %H:%M") if hasattr(idx, "strftime") else str(idx)[:16]
+                                if key == "1d":
+                                    date_str = idx.strftime("%H:%M") if hasattr(idx, "strftime") else str(idx)[11:16]
+                            else:
+                                date_str = str(idx.date()) if hasattr(idx, "date") else str(idx)[:10]
                             prices.append({"date": date_str, "price": round(price, 2)})
                     except (TypeError, ValueError):
                         continue
