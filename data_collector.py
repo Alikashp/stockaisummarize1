@@ -147,6 +147,7 @@ def get_stock_data(ticker: str) -> dict:
     key_indicators["calculated_ratings"] = calculated_ratings
     annual_financials = get_annual_financials(stock)
     recommendation_trend = get_recommendation_trend(stock)
+    earnings_transcript = get_earnings_transcript(ticker)
 
     return {
         "key_indicators": key_indicators,
@@ -164,6 +165,7 @@ def get_stock_data(ticker: str) -> dict:
         "politician_trades": politician_trades,
         "price_history": price_history,
         "revenue_history": revenue_history,
+        "earnings_transcript": earnings_transcript,
     }
 
 TRANSACTION_TRANSLATIONS = {
@@ -349,6 +351,30 @@ def get_politician_trades(ticker: str) -> list:
 
     print(f"Politician trades: найдено {len(politician_trades)} сделок для {ticker}")
     return politician_trades
+
+def get_earnings_transcript(ticker: str) -> dict | None:
+    """Получает транскрипт последнего earnings call через FMP API."""
+    fmp_key = os.getenv("FMP_API_KEY")
+    if not fmp_key:
+        return None
+    try:
+        clean_ticker = ticker.replace(".ME", "")
+        url = f"https://financialmodelingprep.com/stable/earning-call-transcript?symbol={clean_ticker}&apikey={fmp_key}"
+        resp = requests.get(url, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data and len(data) > 0:
+                latest = data[0]
+                return {
+                    "content": latest.get("content", ""),
+                    "date": latest.get("date", ""),
+                    "quarter": latest.get("quarter", ""),
+                    "year": latest.get("year", ""),
+                }
+    except Exception as e:
+        print(f"Earnings transcript error: {e}")
+    return None
+
 
 def get_price_history_multi(stock) -> dict:
     """История цены для разных таймфреймов."""
