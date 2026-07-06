@@ -355,12 +355,17 @@ def get_politician_trades(ticker: str) -> list:
 def get_earnings_transcript(ticker: str) -> dict | None:
     """Получает транскрипт последнего earnings call через FMP API."""
     fmp_key = os.getenv("FMP_API_KEY")
+    print(f"FMP API key found: {bool(fmp_key)}")
     if not fmp_key:
+        print("FMP_API_KEY отсутствует в переменных окружения")
         return None
     try:
         clean_ticker = ticker.replace(".ME", "")
         url = f"https://financialmodelingprep.com/stable/earning-call-transcript?symbol={clean_ticker}&apikey={fmp_key}"
+        print(f"FMP request URL: https://financialmodelingprep.com/stable/earning-call-transcript?symbol={clean_ticker}&apikey=***")
         resp = requests.get(url, timeout=10)
+        print(f"FMP response status: {resp.status_code}")
+        print(f"FMP response (first 300 chars): {resp.text[:300]}")
         if resp.status_code == 200:
             data = resp.json()
             if data and len(data) > 0:
@@ -371,6 +376,8 @@ def get_earnings_transcript(ticker: str) -> dict | None:
                     "quarter": latest.get("quarter", ""),
                     "year": latest.get("year", ""),
                 }
+            else:
+                print("FMP вернул пустой массив transcripts")
     except Exception as e:
         print(f"Earnings transcript error: {e}")
     return None
