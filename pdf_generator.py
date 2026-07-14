@@ -37,13 +37,13 @@ def _ensure_fonts():
 
 
 def generate_pdf_report(analysis_data: dict) -> bytes:
-    """Generates PDF report in Russian from analysis data without calling GPT again."""
-
     _ensure_fonts()
 
     ki = analysis_data.get("key_indicators", {})
     report = analysis_data.get("report", {})
     insiders = analysis_data.get("insider_trades", [])
+    analyst_ratings = analysis_data.get("analyst_ratings", [])
+    news = analysis_data.get("news", [])
 
     currency = ki.get("currency_symbol", "$")
 
@@ -57,61 +57,72 @@ def generate_pdf_report(analysis_data: dict) -> bytes:
     swot = report.get("swot", {}) or {}
 
     pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=20)
+    pdf.set_auto_page_break(auto=True, margin=18)
     pdf.add_page()
-    pdf.set_margins(20, 20, 20)
+    pdf.set_margins(18, 18, 18)
 
     pdf.add_font("DejaVu", "", FONT_PATH)
     pdf.add_font("DejaVu", "B", FONT_BOLD_PATH)
 
-    # Title
-    pdf.set_font("DejaVu", "B", 24)
+    W = pdf.w - 36  # content width
+
+    # ── Header ──────────────────────────────────────────────
+    pdf.set_font("DejaVu", "B", 26)
     pdf.set_text_color(212, 175, 55)
-    pdf.cell(0, 10, str(ki.get("ticker", "")), new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 12, str(ki.get("ticker", "")), new_x="LMARGIN", new_y="NEXT")
 
-    # Subtitle
-    pdf.set_font("DejaVu", "", 12)
-    pdf.set_text_color(100, 100, 100)
-    company = str(ki.get("company_name", ""))
-    pdf.cell(0, 7, f"{company} — ИИ-отчёт от StockAI", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("DejaVu", "", 11)
+    pdf.set_text_color(110, 110, 110)
+    pdf.cell(0, 6, f"{ki.get('company_name', '')} — ИИ-отчёт StockAI", new_x="LMARGIN", new_y="NEXT")
 
-    # Interest level
     interest = report.get("interest_level", "")
     if interest:
         pdf.set_font("DejaVu", "B", 10)
         pdf.set_text_color(212, 175, 55)
-        pdf.cell(0, 8, f"[ {interest} ]", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 7, f"[ {interest} ]", new_x="LMARGIN", new_y="NEXT")
 
-    pdf.ln(4)
+    pdf.ln(3)
 
-    def section_title(title: str):
-        pdf.set_font("DejaVu", "B", 13)
+    # ── Helpers ──────────────────────────────────────────────
+    def section(title: str):
+        pdf.set_x(18)
+        pdf.set_font("DejaVu", "B", 12)
         pdf.set_text_color(26, 26, 26)
         pdf.set_draw_color(212, 175, 55)
-        pdf.set_line_width(0.5)
-        pdf.cell(0, 8, title, new_x="LMARGIN", new_y="NEXT", border="B")
-        pdf.ln(3)
-
-    def body_text(text: str):
-        pdf.set_font("DejaVu", "", 10)
-        pdf.set_text_color(40, 40, 40)
-        pdf.set_x(pdf.l_margin)
-        if text:
-            pdf.multi_cell(0, 5.5, str(text))
-        pdf.ln(3)
-
-    def bullet_list(items, color=(40, 40, 40)):
-        pdf.set_font("DejaVu", "", 10)
-        pdf.set_text_color(*color)
-        lm = pdf.l_margin
-        for item in (items or []):
-            pdf.set_x(lm)
-            pdf.cell(5, 5.5, "-", new_x="RIGHT", new_y="TOP")
-            pdf.multi_cell(pdf.w - pdf.r_margin - pdf.get_x(), 5.5, str(item))
+        pdf.set_line_width(0.4)
+        pdf.cell(0, 7, title, new_x="LMARGIN", new_y="NEXT", border="B")
         pdf.ln(2)
 
-    # Key Indicators
-    section_title("Ключевые показатели")
+    def body(text: str):
+        pdf.set_x(18)
+        pdf.set_font("DejaVu", "", 9.5)
+        pdf.set_text_color(40, 40, 40)
+        if text:
+            pdf.multi_cell(W, 5, str(text))
+        pdf.ln(2)
+
+    def bullets(items, color=(40, 40, 40)):
+        pdf.set_font("DejaVu", "", 9.5)
+        pdf.set_text_color(*color)
+        for item in (items or []):
+            pdf.set_x(18)
+            pdf.cell(5, 5, "-", new_x="RIGHT", new_y="TOP")
+            pdf.multi_cell(W - 5, 5, str(item))
+        pdf.ln(1)
+
+    def table_row(cols, widths, bold=False, fill=False):
+        pdf.set_x(18)
+        if fill:
+            pdf.set_fill_color(240, 240, 240)
+        style = "B" if bold else ""
+        pdf.set_font("DejaVu", style, 8.5)
+        pdf.set_text_color(26, 26, 26)
+        for i, (col, w) in enumerate(zip(cols, widths)):
+            pdf.cell(w, 6, str(col)[:40], border=1, fill=fill)
+        pdf.ln()
+
+    # ── Key Indicators (2×4 grid) ────────────────────────────
+    section("Ключевые показатели")
 
     indicators = [
         ("Цена", fmt(ki.get("price"), currency)),
@@ -120,116 +131,149 @@ def generate_pdf_report(analysis_data: dict) -> bytes:
         ("Fair Value", fmt(fv.get("estimate"), currency)),
         ("Forward P/E", fmt(ki.get("pe_forward"))),
         ("EPS", fmt(ki.get("eps_actual"), currency)),
-        ("Потенциал", fmt(fv.get("upside_pct"), suffix="%") if fv.get("upside_pct") is not None else "Н/Д"),
+        ("Потенциал роста", fmt(fv.get("upside_pct"), suffix="%") if fv.get("upside_pct") is not None else "Н/Д"),
         ("Дивиденды", fmt(ki.get("dividend_yield"), suffix="%") if ki.get("dividend_yield") is not None else "Н/Д"),
     ]
 
-    col_w = (pdf.w - 40) / 4
+    col_w = W / 4
     y_base = pdf.get_y()
     for i, (label, value) in enumerate(indicators):
-        row = i // 4
-        col = i % 4
-        x = 20 + col * col_w
-        y = y_base + row * 16
+        row, col = i // 4, i % 4
+        x = 18 + col * col_w
+        y = y_base + row * 15
         pdf.set_xy(x, y)
-        pdf.set_font("DejaVu", "", 8)
+        pdf.set_font("DejaVu", "", 7.5)
         pdf.set_text_color(130, 130, 130)
-        pdf.cell(col_w, 5, label.upper())
-        pdf.set_xy(x, y + 5)
-        pdf.set_font("DejaVu", "B", 13)
+        pdf.cell(col_w, 4.5, label.upper())
+        pdf.set_xy(x, y + 4.5)
+        pdf.set_font("DejaVu", "B", 12)
         pdf.set_text_color(26, 26, 26)
         pdf.cell(col_w, 7, str(value))
 
-    pdf.set_y(y_base + (((len(indicators) - 1) // 4) + 1) * 16 + 4)
-    pdf.set_x(pdf.l_margin)
+    pdf.set_y(y_base + 32)
+    pdf.set_x(18)
+    pdf.ln(3)
 
-    section_title("Что происходит")
-    body_text(report.get("what_is_happening", ""))
+    # ── AI Analysis ──────────────────────────────────────────
+    section("Что происходит")
+    body(report.get("what_is_happening", ""))
 
-    section_title("Главный катализатор")
-    body_text(report.get("main_catalyst", ""))
+    section("Главный катализатор")
+    body(report.get("main_catalyst", ""))
 
-    section_title("Главный риск")
-    body_text(report.get("main_risk", ""))
+    section("Главный риск")
+    body(report.get("main_risk", ""))
 
-    section_title("Бычий сценарий")
-    bullet_list(report.get("bull_case", []), color=(26, 122, 26))
+    section("Бычий сценарий")
+    bullets(report.get("bull_case", []), color=(26, 110, 26))
 
-    section_title("Медвежий сценарий")
-    bullet_list(report.get("bear_case", []), color=(192, 57, 43))
+    section("Медвежий сценарий")
+    bullets(report.get("bear_case", []), color=(180, 40, 40))
 
+    # ── SWOT ─────────────────────────────────────────────────
     if swot:
-        section_title("SWOT-анализ")
-        half = (pdf.w - 40) / 2
+        section("SWOT-анализ")
+        half = W / 2
 
         def swot_col(title, items, x_start, color):
-            y_cur = pdf.get_y()
-            pdf.set_xy(x_start, y_cur)
-            pdf.set_font("DejaVu", "B", 10)
+            y0 = pdf.get_y()
+            pdf.set_xy(x_start, y0)
+            pdf.set_font("DejaVu", "B", 9)
             pdf.set_text_color(*color)
-            pdf.cell(half, 6, title, new_x="LMARGIN", new_y="NEXT")
-            pdf.set_font("DejaVu", "", 9)
+            pdf.cell(half, 5.5, title, new_x="LMARGIN", new_y="NEXT")
+            pdf.set_font("DejaVu", "", 8.5)
             for item in (items or []):
                 pdf.set_x(x_start + 2)
                 pdf.cell(4, 5, "-", new_x="RIGHT", new_y="TOP")
-                w = max(1, x_start + half - pdf.get_x() - 2)
+                w = max(1.0, x_start + half - pdf.get_x() - 2)
                 pdf.multi_cell(w, 5, str(item))
             return pdf.get_y()
 
         y0 = pdf.get_y()
-        y_str = swot_col("Сильные стороны", swot.get("strengths"), 20, (26, 122, 26))
+        y1 = swot_col("Сильные стороны", swot.get("strengths"), 18, (26, 110, 26))
         pdf.set_y(y0)
-        y_weak = swot_col("Слабые стороны", swot.get("weaknesses"), 20 + half, (192, 57, 43))
-        pdf.set_y(max(y_str, y_weak) + 4)
+        y2 = swot_col("Слабые стороны", swot.get("weaknesses"), 18 + half, (180, 40, 40))
+        pdf.set_y(max(y1, y2) + 3)
 
         y0 = pdf.get_y()
-        y_opp = swot_col("Возможности", swot.get("opportunities"), 20, (26, 74, 122))
+        y1 = swot_col("Возможности", swot.get("opportunities"), 18, (26, 74, 160))
         pdf.set_y(y0)
-        y_thr = swot_col("Угрозы", swot.get("threats"), 20 + half, (160, 64, 0))
-        pdf.set_y(max(y_opp, y_thr) + 4)
+        y2 = swot_col("Угрозы", swot.get("threats"), 18 + half, (160, 80, 0))
+        pdf.set_y(max(y1, y2) + 3)
 
-    section_title("Финансовое здоровье")
+    # ── Financial Health ─────────────────────────────────────
+    section("Финансовое здоровье")
     score_line = (
-        f"Общий балл: {fh.get('score', 'Н/Д')}/10   "
-        f"Рост: {fh.get('growth_rating', 'Н/Д')}/10   "
-        f"Рентабельность: {fh.get('profitability_rating', 'Н/Д')}/10   "
+        f"Общий балл: {fh.get('score', 'Н/Д')}/10    "
+        f"Рост: {fh.get('growth_rating', 'Н/Д')}/10    "
+        f"Рентабельность: {fh.get('profitability_rating', 'Н/Д')}/10    "
         f"Денежный поток: {fh.get('cashflow_rating', 'Н/Д')}/10"
     )
-    pdf.set_font("DejaVu", "B", 11)
+    pdf.set_x(18)
+    pdf.set_font("DejaVu", "B", 10)
     pdf.set_text_color(212, 175, 55)
-    pdf.cell(0, 7, score_line, new_x="LMARGIN", new_y="NEXT")
-    body_text(fh.get("comment", ""))
+    pdf.multi_cell(W, 6, score_line)
+    body(fh.get("comment", ""))
 
-    section_title("Справедливая стоимость")
-    body_text(fv.get("methodology", ""))
+    # ── Fair Value ───────────────────────────────────────────
+    section("Справедливая стоимость")
+    body(fv.get("methodology", ""))
 
+    # ── Analyst Ratings ──────────────────────────────────────
+    if analyst_ratings:
+        section("Рейтинги аналитиков")
+        widths = [28, 55, 45, 28, 18]
+        table_row(["Дата", "Банк", "Рейтинг", "Действие", "Цель"], widths, bold=True, fill=True)
+        for r in analyst_ratings[:12]:
+            date = str(r.get("date", "") or r.get("Date", ""))[:10]
+            firm = str(r.get("firm", "") or r.get("Firm", ""))
+            rating = str(r.get("toGrade", "") or r.get("rating", "") or r.get("Rating", ""))
+            action = str(r.get("action", "") or r.get("Action", ""))
+            pt = str(r.get("priceTarget", "") or "")
+            table_row([date, firm, rating, action, pt], widths)
+        pdf.ln(2)
+
+    # ── News ─────────────────────────────────────────────────
+    if news:
+        section("Последние новости")
+        pdf.set_font("DejaVu", "", 8.5)
+        pdf.set_text_color(40, 40, 40)
+        for item in news[:8]:
+            title = str(item.get("title", "") or item.get("Title", ""))
+            date = str(item.get("providerPublishTime", "") or item.get("date", "") or "")
+            if date and len(date) > 10:
+                date = date[:10]
+            pdf.set_x(18)
+            pdf.set_font("DejaVu", "B", 8.5)
+            pdf.multi_cell(W, 5, title)
+            pdf.set_x(18)
+            pdf.set_font("DejaVu", "", 7.5)
+            pdf.set_text_color(130, 130, 130)
+            pdf.cell(0, 4, date, new_x="LMARGIN", new_y="NEXT")
+            pdf.set_text_color(40, 40, 40)
+            pdf.ln(1)
+        pdf.ln(1)
+
+    # ── Insider Trades ───────────────────────────────────────
     if insiders:
-        section_title("Сделки инсайдеров")
-        pdf.set_font("DejaVu", "B", 9)
-        pdf.set_text_color(26, 26, 26)
-        pdf.set_fill_color(245, 245, 245)
-        col_widths = [55, 55, 40, 30]
-        headers = ["Имя", "Должность", "Тип", "Дата"]
-        for i, h in enumerate(headers):
-            pdf.cell(col_widths[i], 7, h, border=1, fill=True)
-        pdf.ln()
-        pdf.set_font("DejaVu", "", 9)
+        section("Сделки инсайдеров")
+        widths = [52, 50, 36, 28]
+        table_row(["Имя", "Должность", "Тип", "Дата"], widths, bold=True, fill=True)
         for trade in insiders[:8]:
-            vals = [
+            table_row([
                 str(trade.get("name", ""))[:28],
                 str(trade.get("title", ""))[:28],
                 str(trade.get("transaction", ""))[:18],
-                str(trade.get("date", ""))[:12],
-            ]
-            for i, v in enumerate(vals):
-                pdf.cell(col_widths[i], 6, v, border=1)
-            pdf.ln()
+                str(trade.get("date", ""))[:10],
+            ], widths)
+        pdf.ln(2)
 
-    pdf.ln(8)
-    pdf.set_font("DejaVu", "", 8)
-    pdf.set_text_color(150, 150, 150)
-    pdf.multi_cell(
-        0, 5,
+    # ── Footer ───────────────────────────────────────────────
+    pdf.ln(4)
+    pdf.set_x(18)
+    pdf.set_font("DejaVu", "", 7.5)
+    pdf.set_text_color(160, 160, 160)
+    pdf.multi_cell(W, 4.5,
         "Данный отчёт сгенерирован искусственным интеллектом и предназначен только для информационных целей. "
         "Не является финансовой рекомендацией. Всегда проводите собственное исследование. © StockAI"
     )
