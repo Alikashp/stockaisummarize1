@@ -45,24 +45,38 @@ def _ensure_fonts():
             raise RuntimeError(f"Could not download font: {path}")
 
 
+def _get(d: dict, *keys, default=0):
+    """Try multiple key names, return first non-None/non-zero value."""
+    for k in keys:
+        v = d.get(k)
+        if v is not None and v != "" and v != 0:
+            return v
+    return default
+
+
 def _chart_price(price_history: list) -> bytes | None:
-    """Line chart of price history. Returns PNG bytes or None."""
     if not price_history:
         return None
     try:
-        dates = [p.get("date", "") for p in price_history]
-        closes = [float(p.get("close", 0) or 0) for p in price_history]
+        print(f"price_history[0] keys: {list(price_history[0].keys()) if price_history else 'empty'}")
+        dates = [str(_get(p, "date", "Date", "timestamp", default="")) for p in price_history]
+        closes = [float(_get(p, "close", "Close", "price", "Price", "adjClose", default=0)) for p in price_history]
+        closes = [c for c in closes if c > 0]
         if len(closes) < 2:
+            print(f"Not enough price data: {closes[:3]}")
             return None
+
+        # re-align dates to valid closes
+        valid = [(d, c) for d, c in zip(dates, [float(_get(p, "close", "Close", "price", "Price", "adjClose", default=0)) for p in price_history]) if c > 0]
+        dates = [v[0] for v in valid]
+        closes = [v[1] for v in valid]
 
         fig, ax = plt.subplots(figsize=(7.5, 2.4))
         fig.patch.set_facecolor(DARK_BG)
         ax.set_facecolor(DARK_BG)
-
         ax.plot(range(len(closes)), closes, color=GOLD, linewidth=1.5)
         ax.fill_between(range(len(closes)), closes, alpha=0.12, color=GOLD)
 
-        # X labels: show ~6 evenly spaced dates
         step = max(1, len(dates) // 6)
         ax.set_xticks(range(0, len(dates), step))
         ax.set_xticklabels([dates[i][:7] for i in range(0, len(dates), step)],
@@ -85,23 +99,30 @@ def _chart_price(price_history: list) -> bytes | None:
 
 
 def _chart_financials(annual_financials: list) -> bytes | None:
-    """Grouped bar chart: revenue + net income per year."""
     if not annual_financials:
         return None
     try:
-        years = [str(f.get("year", "")) for f in annual_financials]
-        revenues = [float(f.get("revenue", 0) or 0) / 1e9 for f in annual_financials]
-        net_incomes = [float(f.get("net_income", 0) or 0) / 1e9 for f in annual_financials]
+        print(f"annual_financials[0] keys: {list(annual_financials[0].keys()) if annual_financials else 'empty'}")
+        years, revenues, net_incomes = [], [], []
+        for f in annual_financials:
+            year = str(_get(f, "year", "Year", "fiscalYear", "date", default=""))[:4]
+            rev = float(_get(f, "revenue", "Revenue", "totalRevenue", "Total Revenue", default=0))
+            ni = float(_get(f, "net_income", "netIncome", "Net Income", "NetIncome", default=0))
+            if year:
+                years.append(year)
+                revenues.append(rev)
+                net_incomes.append(ni)
+
+        if not years:
+            return None
 
         x = range(len(years))
         w = 0.38
         fig, ax = plt.subplots(figsize=(7.5, 2.4))
         fig.patch.set_facecolor(DARK_BG)
         ax.set_facecolor(DARK_BG)
-
-        bars1 = ax.bar([i - w / 2 for i in x], revenues, width=w, color=GOLD, label="Выручка")
-        bars2 = ax.bar([i + w / 2 for i in x], net_incomes, width=w, color=TEAL, label="Чистая прибыль")
-
+        ax.bar([i - w / 2 for i in x], revenues, width=w, color=GOLD, label="Выручка")
+        ax.bar([i + w / 2 for i in x], net_incomes, width=w, color=TEAL, label="Чистая прибыль")
         ax.set_xticks(list(x))
         ax.set_xticklabels(years, color="#888", fontsize=8)
         ax.tick_params(colors="#888", labelsize=7)
