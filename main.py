@@ -55,6 +55,7 @@ class PDFRequest(BaseModel):
     news: List[Dict[str, Any]] = []
     price_history: List[Dict[str, Any]] = []
     annual_financials: List[Dict[str, Any]] = []
+    recommendation_trend: Dict[str, Any] = {}
 
 
 @app.get("/health")
@@ -134,6 +135,7 @@ def generate_pdf(request: PDFRequest):
             "news": request.news,
             "price_history": request.price_history,
             "annual_financials": request.annual_financials,
+            "recommendation_trend": request.recommendation_trend,
         }
         pdf_bytes = generate_pdf_report(full_data)
         ticker = request.key_indicators.get("ticker", "report")
