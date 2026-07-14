@@ -53,6 +53,8 @@ class PDFRequest(BaseModel):
     insider_trades: List[Dict[str, Any]] = []
     analyst_ratings: List[Dict[str, Any]] = []
     news: List[Dict[str, Any]] = []
+    price_history: List[Dict[str, Any]] = []
+    annual_financials: List[Dict[str, Any]] = []
 
 
 @app.get("/health")
@@ -130,6 +132,8 @@ def generate_pdf(request: PDFRequest):
             "insider_trades": request.insider_trades,
             "analyst_ratings": request.analyst_ratings,
             "news": request.news,
+            "price_history": request.price_history,
+            "annual_financials": request.annual_financials,
         }
         pdf_bytes = generate_pdf_report(full_data)
         ticker = request.key_indicators.get("ticker", "report")
