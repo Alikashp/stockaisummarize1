@@ -448,10 +448,15 @@ def generate_pdf_report(analysis_data: dict) -> bytes:
                 date = str(item.get("providerPublishTime", "") or item.get("date", "") or "")
                 if date and len(date) > 10:
                     date = date[:10]
+                link = str(item.get("link", "") or item.get("url", "") or "")
                 pdf.set_x(18)
                 pdf.set_font("DejaVu", "B", 8.5)
-                pdf.set_text_color(40, 40, 40)
-                pdf.multi_cell(W, 5, title)
+                if link:
+                    pdf.set_text_color(26, 100, 180)
+                    pdf.multi_cell(W, 5, title, link=link)
+                else:
+                    pdf.set_text_color(40, 40, 40)
+                    pdf.multi_cell(W, 5, title)
                 pdf.set_x(18)
                 pdf.set_font("DejaVu", "", 7.5)
                 pdf.set_text_color(130, 130, 130)
