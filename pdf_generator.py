@@ -46,7 +46,6 @@ def _ensure_fonts():
 
 
 def _get(d: dict, *keys, default=0):
-    """Try multiple key names, return first non-None/non-zero value."""
     for k in keys:
         v = d.get(k)
         if v is not None and v != "" and v != 0:
@@ -112,7 +111,7 @@ def _chart_financials(annual_financials: list) -> bytes | None:
         years, revenues, net_incomes = [], [], []
         for f in annual_financials:
             year = str(_get(f, "year", "Year", "fiscalYear", "date", default=""))[:4]
-            # Values are already in billions from data_collector
+            # Values already in billions from data_collector
             rev = _get(f, "revenue", "Revenue", "totalRevenue", "Total Revenue", default=0)
             ni = _get(f, "net_income", "netIncome", "Net Income", "NetIncome", default=0)
             try:
@@ -170,14 +169,15 @@ def generate_pdf_report(analysis_data: dict) -> bytes:
 
     currency = ki.get("currency_symbol", "$")
 
-    def fmt(val, prefix="", suffix=""):
-        if val is None:
-            return "Н/Д"
-        return f"{prefix}{val}{suffix}"
-
     fv = report.get("fair_value", {}) or {}
+    if not isinstance(fv, dict):
+        fv = {}
     fh = report.get("financial_health", {}) or {}
+    if not isinstance(fh, dict):
+        fh = {}
     swot = report.get("swot", {}) or {}
+    if not isinstance(swot, dict):
+        swot = {}
 
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=18)
@@ -187,23 +187,6 @@ def generate_pdf_report(analysis_data: dict) -> bytes:
     pdf.add_font("DejaVu", "B", FONT_BOLD_PATH)
 
     W = pdf.w - 36
-
-    # ── Header ──────────────────────────────────────────────
-    pdf.set_font("DejaVu", "B", 26)
-    pdf.set_text_color(212, 175, 55)
-    pdf.cell(0, 12, str(ki.get("ticker", "")), new_x="LMARGIN", new_y="NEXT")
-
-    pdf.set_font("DejaVu", "", 11)
-    pdf.set_text_color(110, 110, 110)
-    pdf.cell(0, 6, f"{ki.get('company_name', '')} — ИИ-отчёт StockAI", new_x="LMARGIN", new_y="NEXT")
-
-    interest = report.get("interest_level", "")
-    if interest:
-        pdf.set_font("DejaVu", "B", 10)
-        pdf.set_text_color(212, 175, 55)
-        pdf.cell(0, 7, f"[ {interest} ]", new_x="LMARGIN", new_y="NEXT")
-
-    pdf.ln(3)
 
     # ── Helpers ──────────────────────────────────────────────
     def section(title: str):
@@ -216,11 +199,12 @@ def generate_pdf_report(analysis_data: dict) -> bytes:
         pdf.ln(2)
 
     def body(text: str):
+        if not text:
+            return
         pdf.set_x(18)
         pdf.set_font("DejaVu", "", 9.5)
         pdf.set_text_color(40, 40, 40)
-        if text:
-            pdf.multi_cell(W, 5, str(text))
+        pdf.multi_cell(W, 5, str(text))
         pdf.ln(2)
 
     def bullets(items, color=(40, 40, 40)):
@@ -252,18 +236,35 @@ def generate_pdf_report(analysis_data: dict) -> bytes:
         pdf.image(tmp_path, x=18, w=W)
         pdf.ln(3)
 
-    # ── Key Indicators ───────────────────────────────────────
+    # ── Header ──────────────────────────────────────────────
+    pdf.set_font("DejaVu", "B", 26)
+    pdf.set_text_color(212, 175, 55)
+    pdf.cell(0, 12, str(ki.get("ticker", "")), new_x="LMARGIN", new_y="NEXT")
+
+    pdf.set_font("DejaVu", "", 11)
+    pdf.set_text_color(110, 110, 110)
+    pdf.cell(0, 6, f"{ki.get('company_name', '')} — ИИ-отчёт StockAI", new_x="LMARGIN", new_y="NEXT")
+
+    interest = report.get("interest_level", "")
+    if interest:
+        pdf.set_font("DejaVu", "B", 10)
+        pdf.set_text_color(212, 175, 55)
+        pdf.cell(0, 7, f"[ {interest} ]", new_x="LMARGIN", new_y="NEXT")
+
+    pdf.ln(3)
+
+    # ── 1. Key Indicators ────────────────────────────────────
     try:
         section("Ключевые показатели")
         indicators = [
-            ("Цена", fmt(ki.get("price"), currency)),
-            ("Капитализация", fmt(ki.get("market_cap"), currency)),
-            ("P/E", fmt(ki.get("pe_ratio"))),
-            ("Fair Value", fmt(fv.get("estimate"), currency)),
-            ("Forward P/E", fmt(ki.get("pe_forward"))),
-            ("EPS", fmt(ki.get("eps_actual"), currency)),
-            ("Потенциал роста", fmt(fv.get("upside_pct"), suffix="%") if fv.get("upside_pct") is not None else "Н/Д"),
-            ("Дивиденды", fmt(ki.get("dividend_yield"), suffix="%") if ki.get("dividend_yield") is not None else "Н/Д"),
+            ("Цена", f"{currency}{ki.get('price', 'Н/Д')}"),
+            ("Капитализация", f"{currency}{ki.get('market_cap', 'Н/Д')}"),
+            ("P/E", str(ki.get("pe_ratio", "Н/Д"))),
+            ("Fair Value", f"{currency}{fv.get('estimate', 'Н/Д')}"),
+            ("Forward P/E", str(ki.get("pe_forward", "Н/Д"))),
+            ("EPS", f"{currency}{ki.get('eps_actual', 'Н/Д')}"),
+            ("Потенциал роста", f"{fv.get('upside_pct', 'Н/Д')}%"),
+            ("Дивиденды", f"{ki.get('dividend_yield', 'Н/Д')}%"),
         ]
         col_w = W / 4
         y_base = pdf.get_y()
@@ -283,9 +284,74 @@ def generate_pdf_report(analysis_data: dict) -> bytes:
         pdf.set_x(18)
         pdf.ln(3)
     except Exception as e:
-        print(f"Key indicators section error: {e}")
+        print(f"Key indicators error: {e}")
+        pdf.set_x(18)
 
-    # ── Charts ───────────────────────────────────────────────
+    # ── 2. Financial Health ──────────────────────────────────
+    try:
+        section("Финансовое здоровье")
+        score = fh.get("score", "Н/Д")
+        growth_r = fh.get("growth_rating", "Н/Д")
+        profit_r = fh.get("profitability_rating", "Н/Д")
+        cash_r = fh.get("cashflow_rating", "Н/Д")
+        score_line = f"Общий балл: {score}/10    Рост: {growth_r}/10    Рентабельность: {profit_r}/10    Денежный поток: {cash_r}/10"
+        pdf.set_x(18)
+        pdf.set_font("DejaVu", "B", 10)
+        pdf.set_text_color(212, 175, 55)
+        pdf.multi_cell(W, 6, score_line)
+        comment = fh.get("comment", "")
+        if comment:
+            body(str(comment))
+        else:
+            pdf.ln(2)
+    except Exception as e:
+        print(f"Financial health error: {e}")
+        pdf.set_x(18)
+        pdf.ln(3)
+
+    # ── 3. Fair Value ────────────────────────────────────────
+    try:
+        section("Справедливая стоимость")
+        lines = []
+        if fv.get("estimate") is not None:
+            lines.append(f"Оценка справедливой цены: {currency}{fv['estimate']}")
+        if fv.get("upside_pct") is not None:
+            lines.append(f"Потенциал роста от текущей цены: {fv['upside_pct']}%")
+        if fv.get("methodology"):
+            lines.append(str(fv["methodology"]))
+        if lines:
+            body("\n".join(lines))
+        else:
+            body("Данные недоступны")
+    except Exception as e:
+        print(f"Fair value error: {e}")
+        pdf.set_x(18)
+        pdf.ln(3)
+
+    # ── 4. Analyst Consensus ─────────────────────────────────
+    try:
+        strong_buy = int(recommendation_trend.get("strong_buy", 0) or 0)
+        buy = int(recommendation_trend.get("buy", 0) or 0)
+        hold = int(recommendation_trend.get("hold", 0) or 0)
+        sell = int(recommendation_trend.get("sell", 0) or 0)
+        strong_sell = int(recommendation_trend.get("strong_sell", 0) or 0)
+        total = strong_buy + buy + hold + sell + strong_sell
+        if total > 0:
+            section("Консенсус аналитиков")
+            pdf.set_x(18)
+            pdf.set_font("DejaVu", "", 9.5)
+            pdf.set_text_color(40, 40, 40)
+            pdf.multi_cell(W, 6,
+                f"Strong Buy: {strong_buy}   Buy: {buy}   Hold: {hold}   "
+                f"Sell: {sell}   Strong Sell: {strong_sell}   Всего: {total} аналитиков"
+            )
+            pdf.ln(2)
+    except Exception as e:
+        print(f"Analyst consensus error: {e}")
+        pdf.set_x(18)
+        pdf.ln(3)
+
+    # ── 5. Charts ────────────────────────────────────────────
     try:
         price_png = _chart_price(price_history)
         embed_chart(price_png, "/tmp/_chart_price.png", "История цены")
@@ -298,130 +364,65 @@ def generate_pdf_report(analysis_data: dict) -> bytes:
     except Exception as e:
         print(f"Financials chart embed error: {e}")
 
-    # ── AI Analysis ──────────────────────────────────────────
+    # ── 6. AI Analysis ───────────────────────────────────────
     try:
         section("Что происходит")
-        body(report.get("what_is_happening", ""))
+        body(str(report.get("what_is_happening", "") or ""))
     except Exception as e:
-        print(f"What is happening section error: {e}")
+        print(f"What is happening error: {e}")
 
     try:
         section("Главный катализатор")
-        body(report.get("main_catalyst", ""))
+        body(str(report.get("main_catalyst", "") or ""))
     except Exception as e:
-        print(f"Main catalyst section error: {e}")
+        print(f"Main catalyst error: {e}")
 
     try:
         section("Главный риск")
-        body(report.get("main_risk", ""))
+        body(str(report.get("main_risk", "") or ""))
     except Exception as e:
-        print(f"Main risk section error: {e}")
+        print(f"Main risk error: {e}")
 
     try:
         section("Бычий сценарий")
         bullets(report.get("bull_case", []), color=(26, 110, 26))
     except Exception as e:
-        print(f"Bull case section error: {e}")
+        print(f"Bull case error: {e}")
 
     try:
         section("Медвежий сценарий")
         bullets(report.get("bear_case", []), color=(180, 40, 40))
     except Exception as e:
-        print(f"Bear case section error: {e}")
+        print(f"Bear case error: {e}")
 
-    # ── SWOT ─────────────────────────────────────────────────
+    # ── 7. SWOT (simplified linear layout) ──────────────────
     try:
         if swot:
             section("SWOT-анализ")
-            half = W / 2
-
-            def swot_col(title, items, x_start, color):
-                y0 = pdf.get_y()
-                pdf.set_xy(x_start, y0)
+            swot_items = [
+                ("Сильные стороны", swot.get("strengths", []), (26, 110, 26)),
+                ("Слабые стороны", swot.get("weaknesses", []), (180, 40, 40)),
+                ("Возможности", swot.get("opportunities", []), (26, 74, 160)),
+                ("Угрозы", swot.get("threats", []), (160, 80, 0)),
+            ]
+            for title, items, color in swot_items:
+                pdf.set_x(18)
                 pdf.set_font("DejaVu", "B", 9)
                 pdf.set_text_color(*color)
-                pdf.cell(half, 5.5, title, new_x="LMARGIN", new_y="NEXT")
+                pdf.cell(0, 5.5, title, new_x="LMARGIN", new_y="NEXT")
                 pdf.set_font("DejaVu", "", 8.5)
                 pdf.set_text_color(40, 40, 40)
                 for item in (items or []):
-                    pdf.set_x(x_start + 2)
-                    pdf.cell(4, 5, "-", new_x="RIGHT", new_y="TOP")
-                    w = max(1.0, x_start + half - pdf.get_x() - 2)
-                    pdf.multi_cell(w, 5, str(item))
-                return pdf.get_y()
-
-            y0 = pdf.get_y()
-            y1 = swot_col("Сильные стороны", swot.get("strengths"), 18, (26, 110, 26))
-            pdf.set_y(y0)
-            y2 = swot_col("Слабые стороны", swot.get("weaknesses"), 18 + half, (180, 40, 40))
-            pdf.set_y(max(y1, y2) + 3)
-
-            y0 = pdf.get_y()
-            y1 = swot_col("Возможности", swot.get("opportunities"), 18, (26, 74, 160))
-            pdf.set_y(y0)
-            y2 = swot_col("Угрозы", swot.get("threats"), 18 + half, (160, 80, 0))
-            pdf.set_y(max(y1, y2) + 3)
+                    pdf.set_x(20)
+                    pdf.cell(5, 5, "-", new_x="RIGHT", new_y="TOP")
+                    pdf.multi_cell(W - 7, 5, str(item))
+                pdf.ln(2)
     except Exception as e:
-        print(f"SWOT section error: {e}")
+        print(f"SWOT error: {e}")
         pdf.set_x(18)
         pdf.ln(3)
 
-    # ── Financial Health ─────────────────────────────────────
-    try:
-        section("Финансовое здоровье")
-        score_line = (
-            f"Общий балл: {fh.get('score', 'Н/Д')}/10    "
-            f"Рост: {fh.get('growth_rating', 'Н/Д')}/10    "
-            f"Рентабельность: {fh.get('profitability_rating', 'Н/Д')}/10    "
-            f"Денежный поток: {fh.get('cashflow_rating', 'Н/Д')}/10"
-        )
-        pdf.set_x(18)
-        pdf.set_font("DejaVu", "B", 10)
-        pdf.set_text_color(212, 175, 55)
-        pdf.multi_cell(W, 6, score_line)
-        body(fh.get("comment", ""))
-    except Exception as e:
-        print(f"Financial health section error: {e}")
-
-    # ── Fair Value ───────────────────────────────────────────
-    try:
-        section("Справедливая стоимость")
-        fv_lines = []
-        if fv.get("estimate"):
-            fv_lines.append(f"Оценка: {currency}{fv['estimate']}")
-        if fv.get("upside_pct") is not None:
-            fv_lines.append(f"Потенциал роста: {fv['upside_pct']}%")
-        if fv.get("methodology"):
-            fv_lines.append(str(fv["methodology"]))
-        body("\n".join(fv_lines))
-    except Exception as e:
-        print(f"Fair value section error: {e}")
-
-    # ── Analyst Consensus ────────────────────────────────────
-    try:
-        if recommendation_trend:
-            section("Консенсус аналитиков")
-            strong_buy = int(recommendation_trend.get("strong_buy", 0) or 0)
-            buy = int(recommendation_trend.get("buy", 0) or 0)
-            hold = int(recommendation_trend.get("hold", 0) or 0)
-            sell = int(recommendation_trend.get("sell", 0) or 0)
-            strong_sell = int(recommendation_trend.get("strong_sell", 0) or 0)
-            total = strong_buy + buy + hold + sell + strong_sell
-
-            pdf.set_x(18)
-            pdf.set_font("DejaVu", "", 9.5)
-            pdf.set_text_color(40, 40, 40)
-            consensus_text = (
-                f"Strong Buy: {strong_buy}   Buy: {buy}   "
-                f"Hold: {hold}   Sell: {sell}   Strong Sell: {strong_sell}   "
-                f"Всего аналитиков: {total}"
-            )
-            pdf.multi_cell(W, 6, consensus_text)
-            pdf.ln(2)
-    except Exception as e:
-        print(f"Analyst consensus section error: {e}")
-
-    # ── Analyst Ratings ──────────────────────────────────────
+    # ── 8. Analyst Ratings ───────────────────────────────────
     try:
         if analyst_ratings:
             section("Рейтинги аналитиков")
@@ -436,9 +437,9 @@ def generate_pdf_report(analysis_data: dict) -> bytes:
                 table_row([date, firm, rating, action, pt], widths)
             pdf.ln(2)
     except Exception as e:
-        print(f"Analyst ratings section error: {e}")
+        print(f"Analyst ratings error: {e}")
 
-    # ── News ─────────────────────────────────────────────────
+    # ── 9. News ──────────────────────────────────────────────
     try:
         if news:
             section("Последние новости")
@@ -459,9 +460,9 @@ def generate_pdf_report(analysis_data: dict) -> bytes:
                 pdf.ln(1)
             pdf.ln(1)
     except Exception as e:
-        print(f"News section error: {e}")
+        print(f"News error: {e}")
 
-    # ── Insider Trades ───────────────────────────────────────
+    # ── 10. Insider Trades ───────────────────────────────────
     try:
         if insiders:
             section("Сделки инсайдеров")
@@ -476,7 +477,7 @@ def generate_pdf_report(analysis_data: dict) -> bytes:
                 ], widths)
             pdf.ln(2)
     except Exception as e:
-        print(f"Insider trades section error: {e}")
+        print(f"Insider trades error: {e}")
 
     # ── Footer ───────────────────────────────────────────────
     pdf.ln(4)
