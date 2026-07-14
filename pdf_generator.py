@@ -95,6 +95,7 @@ def generate_pdf_report(analysis_data: dict) -> bytes:
     def body_text(text: str):
         pdf.set_font("DejaVu", "", 10)
         pdf.set_text_color(40, 40, 40)
+        pdf.set_x(pdf.l_margin)
         if text:
             pdf.multi_cell(0, 5.5, str(text))
         pdf.ln(3)
@@ -102,9 +103,11 @@ def generate_pdf_report(analysis_data: dict) -> bytes:
     def bullet_list(items, color=(40, 40, 40)):
         pdf.set_font("DejaVu", "", 10)
         pdf.set_text_color(*color)
+        lm = pdf.l_margin
         for item in (items or []):
+            pdf.set_x(lm)
             pdf.cell(5, 5.5, "-", new_x="RIGHT", new_y="TOP")
-            pdf.multi_cell(0, 5.5, str(item))
+            pdf.multi_cell(pdf.w - pdf.r_margin - pdf.get_x(), 5.5, str(item))
         pdf.ln(2)
 
     # Key Indicators
@@ -138,6 +141,7 @@ def generate_pdf_report(analysis_data: dict) -> bytes:
         pdf.cell(col_w, 7, str(value))
 
     pdf.set_y(y_base + (((len(indicators) - 1) // 4) + 1) * 16 + 4)
+    pdf.set_x(pdf.l_margin)
 
     section_title("Что происходит")
     body_text(report.get("what_is_happening", ""))
@@ -168,7 +172,8 @@ def generate_pdf_report(analysis_data: dict) -> bytes:
             for item in (items or []):
                 pdf.set_x(x_start + 2)
                 pdf.cell(4, 5, "-", new_x="RIGHT", new_y="TOP")
-                pdf.multi_cell(half - 10, 5, str(item))
+                w = max(1, x_start + half - pdf.get_x() - 2)
+                pdf.multi_cell(w, 5, str(item))
             return pdf.get_y()
 
         y0 = pdf.get_y()
