@@ -120,6 +120,7 @@ def get_earnings_call_analysis(ticker: str):
 
 @app.post("/generate-pdf")
 def generate_pdf(request: PDFRequest):
+    import traceback
     try:
         full_data = {
             "key_indicators": request.key_indicators,
@@ -134,7 +135,8 @@ def generate_pdf(request: PDFRequest):
             headers={"Content-Disposition": f"attachment; filename={ticker}_report.pdf"},
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=traceback.format_exc())
 
 
 if __name__ == "__main__":
