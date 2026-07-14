@@ -59,15 +59,21 @@ def _chart_price(price_history: list) -> bytes | None:
         return None
     try:
         print(f"price_history[0] keys: {list(price_history[0].keys()) if price_history else 'empty'}")
-        dates = [str(_get(p, "date", "Date", "timestamp", default="")) for p in price_history]
-        closes = [float(_get(p, "close", "Close", "price", "Price", "adjClose", default=0)) for p in price_history]
-        closes = [c for c in closes if c > 0]
-        if len(closes) < 2:
-            print(f"Not enough price data: {closes[:3]}")
+        valid = []
+        for p in price_history:
+            d = str(_get(p, "date", "Date", "timestamp", default=""))
+            c = _get(p, "close", "Close", "price", "Price", "adjClose", default=0)
+            try:
+                c = float(c)
+            except (TypeError, ValueError):
+                c = 0
+            if c > 0:
+                valid.append((d, c))
+
+        if len(valid) < 2:
+            print(f"Not enough price data: {len(valid)} points")
             return None
 
-        # re-align dates to valid closes
-        valid = [(d, c) for d, c in zip(dates, [float(_get(p, "close", "Close", "price", "Price", "adjClose", default=0)) for p in price_history]) if c > 0]
         dates = [v[0] for v in valid]
         closes = [v[1] for v in valid]
 
@@ -106,14 +112,21 @@ def _chart_financials(annual_financials: list) -> bytes | None:
         years, revenues, net_incomes = [], [], []
         for f in annual_financials:
             year = str(_get(f, "year", "Year", "fiscalYear", "date", default=""))[:4]
-            rev = float(_get(f, "revenue", "Revenue", "totalRevenue", "Total Revenue", default=0))
-            ni = float(_get(f, "net_income", "netIncome", "Net Income", "NetIncome", default=0))
-            if year:
+            # Values are already in billions from data_collector
+            rev = _get(f, "revenue", "Revenue", "totalRevenue", "Total Revenue", default=0)
+            ni = _get(f, "net_income", "netIncome", "Net Income", "NetIncome", default=0)
+            try:
+                rev = float(rev)
+                ni = float(ni)
+            except (TypeError, ValueError):
+                rev, ni = 0, 0
+            if year and rev > 0:
                 years.append(year)
                 revenues.append(rev)
                 net_incomes.append(ni)
 
         if not years:
+            print("No valid financials data")
             return None
 
         x = range(len(years))
@@ -153,6 +166,7 @@ def generate_pdf_report(analysis_data: dict) -> bytes:
     news = analysis_data.get("news", [])
     price_history = analysis_data.get("price_history", [])
     annual_financials = analysis_data.get("annual_financials", [])
+    recommendation_trend = analysis_data.get("recommendation_trend", {}) or {}
 
     currency = ki.get("currency_symbol", "$")
 
@@ -228,165 +242,241 @@ def generate_pdf_report(analysis_data: dict) -> bytes:
             pdf.cell(w, 6, str(col)[:40], border=1, fill=fill)
         pdf.ln()
 
-    def embed_chart(png_bytes: bytes, title: str):
+    def embed_chart(png_bytes: bytes, tmp_path: str, title: str):
         if not png_bytes:
             return
-        tmp = "/tmp/_chart.png"
-        with open(tmp, "wb") as f:
+        with open(tmp_path, "wb") as f:
             f.write(png_bytes)
         section(title)
         pdf.set_x(18)
-        pdf.image(tmp, x=18, w=W)
+        pdf.image(tmp_path, x=18, w=W)
         pdf.ln(3)
 
     # ── Key Indicators ───────────────────────────────────────
-    section("Ключевые показатели")
-    indicators = [
-        ("Цена", fmt(ki.get("price"), currency)),
-        ("Капитализация", fmt(ki.get("market_cap"), currency)),
-        ("P/E", fmt(ki.get("pe_ratio"))),
-        ("Fair Value", fmt(fv.get("estimate"), currency)),
-        ("Forward P/E", fmt(ki.get("pe_forward"))),
-        ("EPS", fmt(ki.get("eps_actual"), currency)),
-        ("Потенциал роста", fmt(fv.get("upside_pct"), suffix="%") if fv.get("upside_pct") is not None else "Н/Д"),
-        ("Дивиденды", fmt(ki.get("dividend_yield"), suffix="%") if ki.get("dividend_yield") is not None else "Н/Д"),
-    ]
-    col_w = W / 4
-    y_base = pdf.get_y()
-    for i, (label, value) in enumerate(indicators):
-        row, col = i // 4, i % 4
-        x = 18 + col * col_w
-        y = y_base + row * 15
-        pdf.set_xy(x, y)
-        pdf.set_font("DejaVu", "", 7.5)
-        pdf.set_text_color(130, 130, 130)
-        pdf.cell(col_w, 4.5, label.upper())
-        pdf.set_xy(x, y + 4.5)
-        pdf.set_font("DejaVu", "B", 12)
-        pdf.set_text_color(26, 26, 26)
-        pdf.cell(col_w, 7, str(value))
-    pdf.set_y(y_base + 32)
-    pdf.set_x(18)
-    pdf.ln(3)
-
-    # ── Charts ───────────────────────────────────────────────
-    price_png = _chart_price(price_history)
-    fin_png = _chart_financials(annual_financials)
-    embed_chart(price_png, "История цены")
-    embed_chart(fin_png, "Годовая динамика")
-
-    # ── AI Analysis ──────────────────────────────────────────
-    section("Что происходит")
-    body(report.get("what_is_happening", ""))
-
-    section("Главный катализатор")
-    body(report.get("main_catalyst", ""))
-
-    section("Главный риск")
-    body(report.get("main_risk", ""))
-
-    section("Бычий сценарий")
-    bullets(report.get("bull_case", []), color=(26, 110, 26))
-
-    section("Медвежий сценарий")
-    bullets(report.get("bear_case", []), color=(180, 40, 40))
-
-    # ── SWOT ─────────────────────────────────────────────────
-    if swot:
-        section("SWOT-анализ")
-        half = W / 2
-
-        def swot_col(title, items, x_start, color):
-            y0 = pdf.get_y()
-            pdf.set_xy(x_start, y0)
-            pdf.set_font("DejaVu", "B", 9)
-            pdf.set_text_color(*color)
-            pdf.cell(half, 5.5, title, new_x="LMARGIN", new_y="NEXT")
-            pdf.set_font("DejaVu", "", 8.5)
-            for item in (items or []):
-                pdf.set_x(x_start + 2)
-                pdf.cell(4, 5, "-", new_x="RIGHT", new_y="TOP")
-                w = max(1.0, x_start + half - pdf.get_x() - 2)
-                pdf.multi_cell(w, 5, str(item))
-            return pdf.get_y()
-
-        y0 = pdf.get_y()
-        y1 = swot_col("Сильные стороны", swot.get("strengths"), 18, (26, 110, 26))
-        pdf.set_y(y0)
-        y2 = swot_col("Слабые стороны", swot.get("weaknesses"), 18 + half, (180, 40, 40))
-        pdf.set_y(max(y1, y2) + 3)
-
-        y0 = pdf.get_y()
-        y1 = swot_col("Возможности", swot.get("opportunities"), 18, (26, 74, 160))
-        pdf.set_y(y0)
-        y2 = swot_col("Угрозы", swot.get("threats"), 18 + half, (160, 80, 0))
-        pdf.set_y(max(y1, y2) + 3)
-
-    # ── Financial Health ─────────────────────────────────────
-    section("Финансовое здоровье")
-    score_line = (
-        f"Общий балл: {fh.get('score', 'Н/Д')}/10    "
-        f"Рост: {fh.get('growth_rating', 'Н/Д')}/10    "
-        f"Рентабельность: {fh.get('profitability_rating', 'Н/Д')}/10    "
-        f"Денежный поток: {fh.get('cashflow_rating', 'Н/Д')}/10"
-    )
-    pdf.set_x(18)
-    pdf.set_font("DejaVu", "B", 10)
-    pdf.set_text_color(212, 175, 55)
-    pdf.multi_cell(W, 6, score_line)
-    body(fh.get("comment", ""))
-
-    # ── Fair Value ───────────────────────────────────────────
-    section("Справедливая стоимость")
-    body(fv.get("methodology", ""))
-
-    # ── Analyst Ratings ──────────────────────────────────────
-    if analyst_ratings:
-        section("Рейтинги аналитиков")
-        widths = [28, 58, 44, 28, 16]
-        table_row(["Дата", "Банк", "Рейтинг", "Действие", "Цель"], widths, bold=True, fill=True)
-        for r in analyst_ratings[:12]:
-            date = str(r.get("date", "") or r.get("Date", ""))[:10]
-            firm = str(r.get("firm", "") or r.get("Firm", ""))
-            rating = str(r.get("toGrade", "") or r.get("rating", "") or r.get("Rating", ""))
-            action = str(r.get("action", "") or r.get("Action", ""))
-            pt = str(r.get("priceTarget", "") or "")
-            table_row([date, firm, rating, action, pt], widths)
-        pdf.ln(2)
-
-    # ── News ─────────────────────────────────────────────────
-    if news:
-        section("Последние новости")
-        for item in news[:8]:
-            title = str(item.get("title", "") or item.get("Title", ""))
-            date = str(item.get("providerPublishTime", "") or item.get("date", "") or "")
-            if date and len(date) > 10:
-                date = date[:10]
-            pdf.set_x(18)
-            pdf.set_font("DejaVu", "B", 8.5)
-            pdf.set_text_color(40, 40, 40)
-            pdf.multi_cell(W, 5, title)
-            pdf.set_x(18)
+    try:
+        section("Ключевые показатели")
+        indicators = [
+            ("Цена", fmt(ki.get("price"), currency)),
+            ("Капитализация", fmt(ki.get("market_cap"), currency)),
+            ("P/E", fmt(ki.get("pe_ratio"))),
+            ("Fair Value", fmt(fv.get("estimate"), currency)),
+            ("Forward P/E", fmt(ki.get("pe_forward"))),
+            ("EPS", fmt(ki.get("eps_actual"), currency)),
+            ("Потенциал роста", fmt(fv.get("upside_pct"), suffix="%") if fv.get("upside_pct") is not None else "Н/Д"),
+            ("Дивиденды", fmt(ki.get("dividend_yield"), suffix="%") if ki.get("dividend_yield") is not None else "Н/Д"),
+        ]
+        col_w = W / 4
+        y_base = pdf.get_y()
+        for i, (label, value) in enumerate(indicators):
+            row, col = i // 4, i % 4
+            x = 18 + col * col_w
+            y = y_base + row * 15
+            pdf.set_xy(x, y)
             pdf.set_font("DejaVu", "", 7.5)
             pdf.set_text_color(130, 130, 130)
-            pdf.cell(0, 4, date, new_x="LMARGIN", new_y="NEXT")
+            pdf.cell(col_w, 4.5, label.upper())
+            pdf.set_xy(x, y + 4.5)
+            pdf.set_font("DejaVu", "B", 12)
+            pdf.set_text_color(26, 26, 26)
+            pdf.cell(col_w, 7, str(value))
+        pdf.set_y(y_base + 32)
+        pdf.set_x(18)
+        pdf.ln(3)
+    except Exception as e:
+        print(f"Key indicators section error: {e}")
+
+    # ── Charts ───────────────────────────────────────────────
+    try:
+        price_png = _chart_price(price_history)
+        embed_chart(price_png, "/tmp/_chart_price.png", "История цены")
+    except Exception as e:
+        print(f"Price chart embed error: {e}")
+
+    try:
+        fin_png = _chart_financials(annual_financials)
+        embed_chart(fin_png, "/tmp/_chart_fin.png", "Годовая динамика")
+    except Exception as e:
+        print(f"Financials chart embed error: {e}")
+
+    # ── AI Analysis ──────────────────────────────────────────
+    try:
+        section("Что происходит")
+        body(report.get("what_is_happening", ""))
+    except Exception as e:
+        print(f"What is happening section error: {e}")
+
+    try:
+        section("Главный катализатор")
+        body(report.get("main_catalyst", ""))
+    except Exception as e:
+        print(f"Main catalyst section error: {e}")
+
+    try:
+        section("Главный риск")
+        body(report.get("main_risk", ""))
+    except Exception as e:
+        print(f"Main risk section error: {e}")
+
+    try:
+        section("Бычий сценарий")
+        bullets(report.get("bull_case", []), color=(26, 110, 26))
+    except Exception as e:
+        print(f"Bull case section error: {e}")
+
+    try:
+        section("Медвежий сценарий")
+        bullets(report.get("bear_case", []), color=(180, 40, 40))
+    except Exception as e:
+        print(f"Bear case section error: {e}")
+
+    # ── SWOT ─────────────────────────────────────────────────
+    try:
+        if swot:
+            section("SWOT-анализ")
+            half = W / 2
+
+            def swot_col(title, items, x_start, color):
+                y0 = pdf.get_y()
+                pdf.set_xy(x_start, y0)
+                pdf.set_font("DejaVu", "B", 9)
+                pdf.set_text_color(*color)
+                pdf.cell(half, 5.5, title, new_x="LMARGIN", new_y="NEXT")
+                pdf.set_font("DejaVu", "", 8.5)
+                pdf.set_text_color(40, 40, 40)
+                for item in (items or []):
+                    pdf.set_x(x_start + 2)
+                    pdf.cell(4, 5, "-", new_x="RIGHT", new_y="TOP")
+                    w = max(1.0, x_start + half - pdf.get_x() - 2)
+                    pdf.multi_cell(w, 5, str(item))
+                return pdf.get_y()
+
+            y0 = pdf.get_y()
+            y1 = swot_col("Сильные стороны", swot.get("strengths"), 18, (26, 110, 26))
+            pdf.set_y(y0)
+            y2 = swot_col("Слабые стороны", swot.get("weaknesses"), 18 + half, (180, 40, 40))
+            pdf.set_y(max(y1, y2) + 3)
+
+            y0 = pdf.get_y()
+            y1 = swot_col("Возможности", swot.get("opportunities"), 18, (26, 74, 160))
+            pdf.set_y(y0)
+            y2 = swot_col("Угрозы", swot.get("threats"), 18 + half, (160, 80, 0))
+            pdf.set_y(max(y1, y2) + 3)
+    except Exception as e:
+        print(f"SWOT section error: {e}")
+        pdf.set_x(18)
+        pdf.ln(3)
+
+    # ── Financial Health ─────────────────────────────────────
+    try:
+        section("Финансовое здоровье")
+        score_line = (
+            f"Общий балл: {fh.get('score', 'Н/Д')}/10    "
+            f"Рост: {fh.get('growth_rating', 'Н/Д')}/10    "
+            f"Рентабельность: {fh.get('profitability_rating', 'Н/Д')}/10    "
+            f"Денежный поток: {fh.get('cashflow_rating', 'Н/Д')}/10"
+        )
+        pdf.set_x(18)
+        pdf.set_font("DejaVu", "B", 10)
+        pdf.set_text_color(212, 175, 55)
+        pdf.multi_cell(W, 6, score_line)
+        body(fh.get("comment", ""))
+    except Exception as e:
+        print(f"Financial health section error: {e}")
+
+    # ── Fair Value ───────────────────────────────────────────
+    try:
+        section("Справедливая стоимость")
+        fv_lines = []
+        if fv.get("estimate"):
+            fv_lines.append(f"Оценка: {currency}{fv['estimate']}")
+        if fv.get("upside_pct") is not None:
+            fv_lines.append(f"Потенциал роста: {fv['upside_pct']}%")
+        if fv.get("methodology"):
+            fv_lines.append(str(fv["methodology"]))
+        body("\n".join(fv_lines))
+    except Exception as e:
+        print(f"Fair value section error: {e}")
+
+    # ── Analyst Consensus ────────────────────────────────────
+    try:
+        if recommendation_trend:
+            section("Консенсус аналитиков")
+            strong_buy = int(recommendation_trend.get("strong_buy", 0) or 0)
+            buy = int(recommendation_trend.get("buy", 0) or 0)
+            hold = int(recommendation_trend.get("hold", 0) or 0)
+            sell = int(recommendation_trend.get("sell", 0) or 0)
+            strong_sell = int(recommendation_trend.get("strong_sell", 0) or 0)
+            total = strong_buy + buy + hold + sell + strong_sell
+
+            pdf.set_x(18)
+            pdf.set_font("DejaVu", "", 9.5)
             pdf.set_text_color(40, 40, 40)
+            consensus_text = (
+                f"Strong Buy: {strong_buy}   Buy: {buy}   "
+                f"Hold: {hold}   Sell: {sell}   Strong Sell: {strong_sell}   "
+                f"Всего аналитиков: {total}"
+            )
+            pdf.multi_cell(W, 6, consensus_text)
+            pdf.ln(2)
+    except Exception as e:
+        print(f"Analyst consensus section error: {e}")
+
+    # ── Analyst Ratings ──────────────────────────────────────
+    try:
+        if analyst_ratings:
+            section("Рейтинги аналитиков")
+            widths = [28, 58, 44, 28, 16]
+            table_row(["Дата", "Банк", "Рейтинг", "Действие", "Цель"], widths, bold=True, fill=True)
+            for r in analyst_ratings[:12]:
+                date = str(r.get("date", "") or "")[:10]
+                firm = str(r.get("firm", "") or "")
+                rating = str(r.get("to_grade", "") or r.get("toGrade", "") or r.get("rating", "") or "")
+                action = str(r.get("action", "") or r.get("Action", "") or "")
+                pt = str(r.get("priceTarget", "") or r.get("price_target", "") or "")
+                table_row([date, firm, rating, action, pt], widths)
+            pdf.ln(2)
+    except Exception as e:
+        print(f"Analyst ratings section error: {e}")
+
+    # ── News ─────────────────────────────────────────────────
+    try:
+        if news:
+            section("Последние новости")
+            for item in news[:8]:
+                title = str(item.get("title", "") or item.get("Title", ""))
+                date = str(item.get("providerPublishTime", "") or item.get("date", "") or "")
+                if date and len(date) > 10:
+                    date = date[:10]
+                pdf.set_x(18)
+                pdf.set_font("DejaVu", "B", 8.5)
+                pdf.set_text_color(40, 40, 40)
+                pdf.multi_cell(W, 5, title)
+                pdf.set_x(18)
+                pdf.set_font("DejaVu", "", 7.5)
+                pdf.set_text_color(130, 130, 130)
+                pdf.cell(0, 4, date, new_x="LMARGIN", new_y="NEXT")
+                pdf.set_text_color(40, 40, 40)
+                pdf.ln(1)
             pdf.ln(1)
-        pdf.ln(1)
+    except Exception as e:
+        print(f"News section error: {e}")
 
     # ── Insider Trades ───────────────────────────────────────
-    if insiders:
-        section("Сделки инсайдеров")
-        widths = [52, 50, 36, 28]
-        table_row(["Имя", "Должность", "Тип", "Дата"], widths, bold=True, fill=True)
-        for trade in insiders[:8]:
-            table_row([
-                str(trade.get("name", ""))[:28],
-                str(trade.get("title", ""))[:28],
-                str(trade.get("transaction", ""))[:18],
-                str(trade.get("date", ""))[:10],
-            ], widths)
-        pdf.ln(2)
+    try:
+        if insiders:
+            section("Сделки инсайдеров")
+            widths = [52, 50, 36, 28]
+            table_row(["Имя", "Должность", "Тип", "Дата"], widths, bold=True, fill=True)
+            for trade in insiders[:8]:
+                table_row([
+                    str(trade.get("name", ""))[:28],
+                    str(trade.get("title", ""))[:28],
+                    str(trade.get("transaction", ""))[:18],
+                    str(trade.get("date", ""))[:10],
+                ], widths)
+            pdf.ln(2)
+    except Exception as e:
+        print(f"Insider trades section error: {e}")
 
     # ── Footer ───────────────────────────────────────────────
     pdf.ln(4)
