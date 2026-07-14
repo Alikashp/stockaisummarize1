@@ -5,12 +5,15 @@ GET  /health  — проверка что сервер работает
 """
 
 import math
+from typing import Any, Dict, List
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel
 from data_collector import get_stock_data
 from ai_analyzer import generate_report
 from earnings_analyzer import analyze_earnings_call
+from pdf_generator import generate_pdf_report
 
 
 def sanitize(obj):
@@ -42,6 +45,12 @@ app.add_middleware(
 
 class AnalyzeRequest(BaseModel):
     ticker: str
+
+
+class PDFRequest(BaseModel):
+    key_indicators: Dict[str, Any]
+    report: Dict[str, Any]
+    insider_trades: List[Dict[str, Any]] = []
 
 
 @app.get("/health")
@@ -105,6 +114,25 @@ def get_earnings_call_analysis(ticker: str):
         return {"ticker": ticker, "transcript_date": transcript.get("date"), "analysis": analysis}
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/generate-pdf")
+def generate_pdf(request: PDFRequest):
+    try:
+        full_data = {
+            "key_indicators": request.key_indicators,
+            "report": request.report,
+            "insider_trades": request.insider_trades,
+        }
+        pdf_bytes = generate_pdf_report(full_data)
+        ticker = request.key_indicators.get("ticker", "report")
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={ticker}_report.pdf"},
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
