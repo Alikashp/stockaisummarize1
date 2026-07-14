@@ -5,19 +5,35 @@ from fpdf import FPDF
 FONT_PATH = "/tmp/DejaVuSans.ttf"
 FONT_BOLD_PATH = "/tmp/DejaVuSans-Bold.ttf"
 
-FONT_URLS = {
-    FONT_PATH: "https://github.com/dejavu-fonts/dejavu-fonts/raw/master/ttf/DejaVuSans.ttf",
-    FONT_BOLD_PATH: "https://github.com/dejavu-fonts/dejavu-fonts/raw/master/ttf/DejaVuSans-Bold.ttf",
+FONT_SOURCES = {
+    FONT_PATH: [
+        "https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans.ttf",
+        "https://raw.githubusercontent.com/dejavu-fonts/dejavu-fonts/main/ttf/DejaVuSans.ttf",
+    ],
+    FONT_BOLD_PATH: [
+        "https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans-Bold.ttf",
+        "https://raw.githubusercontent.com/dejavu-fonts/dejavu-fonts/main/ttf/DejaVuSans-Bold.ttf",
+    ],
 }
 
 
 def _ensure_fonts():
-    for path, url in FONT_URLS.items():
-        if not os.path.exists(path):
-            r = requests.get(url, timeout=30)
-            r.raise_for_status()
-            with open(path, "wb") as f:
-                f.write(r.content)
+    for path, urls in FONT_SOURCES.items():
+        if os.path.exists(path):
+            continue
+        for url in urls:
+            try:
+                print(f"Downloading font: {url}")
+                r = requests.get(url, timeout=30)
+                r.raise_for_status()
+                with open(path, "wb") as f:
+                    f.write(r.content)
+                print(f"Font saved: {path}")
+                break
+            except Exception as e:
+                print(f"Failed {url}: {e}")
+        else:
+            raise RuntimeError(f"Could not download font: {path}")
 
 
 def generate_pdf_report(analysis_data: dict) -> bytes:
@@ -123,7 +139,6 @@ def generate_pdf_report(analysis_data: dict) -> bytes:
 
     pdf.set_y(y_base + (((len(indicators) - 1) // 4) + 1) * 16 + 4)
 
-    # Sections
     section_title("Что происходит")
     body_text(report.get("what_is_happening", ""))
 
@@ -139,7 +154,6 @@ def generate_pdf_report(analysis_data: dict) -> bytes:
     section_title("Медвежий сценарий")
     bullet_list(report.get("bear_case", []), color=(192, 57, 43))
 
-    # SWOT
     if swot:
         section_title("SWOT-анализ")
         half = (pdf.w - 40) / 2
@@ -169,7 +183,6 @@ def generate_pdf_report(analysis_data: dict) -> bytes:
         y_thr = swot_col("Угрозы", swot.get("threats"), 20 + half, (160, 64, 0))
         pdf.set_y(max(y_opp, y_thr) + 4)
 
-    # Financial health
     section_title("Финансовое здоровье")
     score_line = (
         f"Общий балл: {fh.get('score', 'Н/Д')}/10   "
@@ -185,7 +198,6 @@ def generate_pdf_report(analysis_data: dict) -> bytes:
     section_title("Справедливая стоимость")
     body_text(fv.get("methodology", ""))
 
-    # Insider trades
     if insiders:
         section_title("Сделки инсайдеров")
         pdf.set_font("DejaVu", "B", 9)
@@ -208,7 +220,6 @@ def generate_pdf_report(analysis_data: dict) -> bytes:
                 pdf.cell(col_widths[i], 6, v, border=1)
             pdf.ln()
 
-    # Footer
     pdf.ln(8)
     pdf.set_font("DejaVu", "", 8)
     pdf.set_text_color(150, 150, 150)
