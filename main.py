@@ -63,6 +63,37 @@ def health():
     return {"status": "ok", "message": "Stock AI Analyzer is running"}
 
 
+@app.get("/search")
+def search_ticker(q: str):
+    if not q or len(q) < 1:
+        return {"results": []}
+    try:
+        import requests as req
+        url = "https://query1.finance.yahoo.com/v1/finance/search"
+        params = {
+            "q": q,
+            "quotesCount": 8,
+            "newsCount": 0,
+            "enableFuzzyQuery": False,
+            "quotesQueryId": "tss_match_phrase_query",
+        }
+        headers = {"User-Agent": "Mozilla/5.0"}
+        resp = req.get(url, params=params, headers=headers, timeout=5)
+        data = resp.json()
+        quotes = data.get("quotes", [])
+        results = []
+        for item in quotes:
+            symbol = item.get("symbol", "")
+            name = item.get("shortname") or item.get("longname") or ""
+            exchange = item.get("exchange", "")
+            if symbol and name:
+                results.append({"symbol": symbol, "name": name, "exchange": exchange})
+        return {"results": results}
+    except Exception as e:
+        print(f"Search error: {e}")
+        return {"results": []}
+
+
 @app.post("/analyze")
 def analyze(request: AnalyzeRequest):
     ticker = request.ticker.upper().strip()
